@@ -1,0 +1,147 @@
+#! /bin/sh
+#
+# This script is used to configure the linux kernel.
+#
+# It was inspired by the challenge in the original Configure script
+# to ``do something better'', combined with the actual need to ``do
+# something better'' because the old configure script wasn't flexible
+# enough.
+#
+# Please send comments / questions / bug fixes to raymondc@microsoft.com.
+#
+# Each line in the config file is a command.
+#
+# 050793 - use IFS='@' to get around a bug in a pre-version of bash-1.13
+# with an empty IFS.
+
+#
+# Make sure we're really running bash.
+#
+# I would really have preferred to write this script in a language with
+# better string handling, but alas, bash is the only scripting language
+# that I can be reasonable sure everybody has on their linux machine.
+#
+[ -z "$BASH" ] && { echo "Configure requires bash" 1>&2; exit 1; }
+
+# Disable filename globbing once and for all.
+# Enable function cacheing.
+set -f -h
+
+#
+# readln reads a line into $ans.
+#
+#	readln prompt default
+#
+function readln () {
+	if [ "$DEFAULT" = "-d" ]; then
+		echo "$1"
+		ans=$2
+	else
+		echo -n "$1"
+		IFS='@' read ans </dev/tty || exit 1
+		[ -z "$ans" ] && ans=$2
+	fi
+}
+
+#
+# comment does some pretty-printing
+#
+#	comment 'xxx'
+# 
+function comment () {
+	echo "*"; echo "* $1" ; echo "*"
+	(echo "" ; echo "#"; echo "# $1" ; echo "#") >>$CONFIG
+	(echo "" ; echo "/*"; echo " * $1" ; echo " */") >>$CONFIG_H
+}
+
+#
+# bool processes a boolean argument
+#
+#	bool question define default
+#
+function bool () {
+	ans=""
+	def=$(eval echo "\${$2:-$3}")
+	while [ "$ans" != "y" -a "$ans" != "n" ]; do
+		readln "$1 ($2) [$def] " "$def"
+	done
+	if [ "$ans" = "y" ]; then
+		echo "$2=y" >>$CONFIG
+		echo "#define $2 1" >>$CONFIG_H
+	else
+		echo "# $2 is not set" >>$CONFIG
+		echo "#undef  $2" >>$CONFIG_H
+	fi
+	eval "$2=$ans"
+}
+
+#
+# int processes an integer argument
+#
+#	int question define default
+#
+function int () {
+	# Slimier hack to get bash to rescan a line.
+	ans="x"
+	def=$(eval echo "\${$2:-$3}")
+	while [ $[$ans+0] != "$ans" ]; do
+		readln "$1 ($2) [$def] " "$def"
+	done
+	echo "$2=$ans" >>$CONFIG
+	echo "#define $2 ($ans)" >>$CONFIG_H
+	eval "$2=$ans"
+}
+
+CONFIG=.tmpconfig
+CONFIG_H=.tmpconfig.h
+trap "rm -f $CONFIG $CONFIG_H ; exit 1" 1 2
+
+#
+# Make sure we start out with a clean slate.
+#
+echo "#" > $CONFIG
+echo "# Automatically generated make config: don't edit" >> $CONFIG
+echo "#" >> $CONFIG
+
+echo "/*" > $CONFIG_H
+echo " * Automatically generated C config: don't edit" >> $CONFIG_H
+echo " */" >> $CONFIG_H
+
+DEFAULT=""
+if [ "$1" = "-d" ] ; then
+	DEFAULT="-d"
+	shift
+fi
+
+CONFIG_IN=./config.in
+if [ "$1" != "" ] ; then
+	CONFIG_IN=$1
+fi
+
+if [ -f ./.config ] ; then
+	. ./.config
+	sed -e 's/# \(.*\) is not.*/\1=n/' <./.config >/tmp/conf.$$
+	. /tmp/conf.$$
+	rm /tmp/conf.$$
+fi
+. $CONFIG_IN
+
+if [ "$CONFIG_SOUND" = "y" ] ; then
+	$MAKE -C drivers/sound config || exit 1
+fi
+
+rm -f .config.old
+if [ -f .config ]; then
+	mv .config .config.old
+fi
+mv .tmpconfig .config
+mv .tmpconfig.h include/linux/autoconf.h
+
+echo
+echo "The linux kernel is now hopefully configured for your setup."
+echo "Check the top-level Makefile for additional configuration,"
+echo "and do a 'make dep ; make clean' if you want to be sure all"
+echo "the files are correctly re-made"
+echo
+
+exit 0

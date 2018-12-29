@@ -1,0 +1,278 @@
+README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.2.x)
+================================================================================
+Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
+               snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
+
+(see description later on below for handling BIG IDE drives with >1024 cyls).
+
+Major features of ide.c & ide-cd.c:
+
+	- support for up to two IDE interfaces on one or two IRQs
+	- support for any mix of up to four disk and/or cdrom drives
+	- support for reading IDE ATAPI cdrom drives (NEC,MITSUMI,VERTOS,SONY)
+	- support for audio functions
+	- auto-detection of interfaces, drives, IRQs, and disk geometries
+	  -- "single" drives should be jumpered as "master", not "slave"
+	- support for BIOSs which report "more than 16 heads" on disk drives
+	- uses LBA (slightly faster) on disk drives which support it
+	- support for lots of fancy (E)IDE drive functions with hdparm utility
+	- optional (compile time) support for 32-bit VLB data transfers
+	- support for IDE multiple (block) mode (same as hd.c)
+	- support for interrupt unmasking during I/O (better than hd.c)
+	- improved handshaking and error detection/recovery
+	- can co-exist with hd.c to control only the secondary interface
+NEW!	- support for reliable operation of buggy CMD-640 interfaces
+		- use kernel command line option:   hda=serialize
+NEW!	- experimental support for DTC-2278D interfaces
+		- use kernel command line option:  hda=dtc2278
+NEW!	- run-time selectable 32bit interface support (using hdparm-2.3)
+
+Under construction:
+
+	- improved CMD support:  tech info is supposedly "in the mail"
+	- support for interface speed selection on jumperless interfaces
+	- improved detection of non-standard IDE ATAPI cdrom drives
+	- support for non-standard 3rd/4th drive interface on Promise cards
+
+***
+
+IMPORTANT NOTICE:  "CMD" EIDE Interfaces will not (by default) work *reliably*
+when drives are attached to the second interface.  To "fix" this, supply the
+special kernel "command line" parameter to LILO:    hda=serialize
+Failure to do so can cause severe data corruption!
+
+***
+
+To access devices on the second interface, device entries must first be
+created in /dev for them.  To create such entries, simply run the included
+shell script:   MAKEDEV.ide1
+
+Apparently the early releases of Slackware 2.2 have incorrect entries
+in /dev for hdc* and hdd* -- this can also be corrected by running MAKEDEV.ide1
+
+ide.c automatically probes for the primary and secondary interfaces,
+for the drives/geometries attached to those interfaces, and for the
+IRQ numbers being used by the interfaces (normally IRQ14 & IRQ15).
+
+The primary and secondary interfaces may share a single IRQ if necessary,
+at a slight performance penalty, whether on separate cards or a single VLB card.
+
+Drives are normally found by auto-probing and/or examining the CMOS/BIOS data.
+For really weird situations, the apparent (fdisk) geometry can also be specified
+on the kernel "command line" using LILO.  The format of such lines is:   
+
+	hdx=cyls,heads,sects,wpcom,irq
+or	hdx=cdrom
+
+where hdx can be any of {hda,hdb,hdc,hdd}, or simply hd, for the "next" drive
+in sequence.  Only the first three parameters are required (cyls,heads,sects),
+and wpcom is ignored for IDE drives.  For example:
+
+	hdc=1050,32,64 hdd=cdrom
+
+If an irq number is given, it will apply to both drives on the same interface,
+either {hda,hdb} or {hdc,hdd}.  The results of successful auto-probing may
+override the physical geometry/irq specified, though the "original" geometry
+is retained as the "logical" geometry for partitioning purposes (fdisk).
+
+If the auto-probing during boot time confuses a drive (ie. the drive works
+with hd.c but not with ide.c), then an command line option may be specified
+for each drive for which you'd like the drive to skip the hardware
+probe/identification sequence.  For example:
+
+	hdb=noprobe
+or
+	hdc=768,16,32
+	hdc=noprobe
+
+Note that when only one IDE device is attached to an interface,
+it must be jumpered as "single" or "master", *not* "slave".
+Many folks have had "trouble" with cdroms because of this requirement
+of the ATA (IDE) standard.
+
+Courtesy of Scott Snyder, the driver now supports ATAPI cdrom drives
+such as the NEC-260 and the new MITSUMI triple/quad speed drives.
+Such drives will be identified at boot time, as hda,hdb,hdc or hdd,
+just like a harddisk.
+
+If for some reason your cdrom drive is *not* found at boot time, you can force
+the probe to look harder by supplying a kernel command line parameter
+via LILO, such as:  hdc=cdrom
+
+For example, a GW2000 system might have a harddrive on the primary
+interface (/dev/hda) and an IDE cdrom drive on the secondary interface
+(/dev/hdc).  To mount a CD in the cdrom drive, one would use something like:
+
+	ln -sf /dev/hdc /dev/cdrom
+	mkdir /cd
+	mount /dev/cdrom /cd -t iso9660 -o ro
+
+Please pass on any feedback on the cdrom stuff to the author & maintainer,
+Scott Snyder (snyder@fnald0.fnal.gov).
+
+The kernel is now be able to execute binaries directly off of the cdrom,
+provided it is mounted with the default block size of 1024.
+
+The hdparm.c program for controlling various IDE features is now packaged
+separately.  Look for it on popular linux FTP sites.
+
+mlord@bnr.ca
+snyder@fnald0.fnal.gov
+================================================================================
+
+Some Terminology
+----------------
+IDE = Integrated Drive Electronics, meaning that each drive has a built-in
+controller, which is why an "IDE interface card" is not a "controller card".
+
+IDE drives are designed to attach almost directly to the ISA bus of an AT-style
+computer.  The typical IDE interface card merely provides I/O port address
+decoding and tri-state buffers, although several newer localbus cards go much
+beyond the basics.  When purchasing a localbus IDE interface, avoid cards with
+an onboard BIOS and those which require special drivers.  Instead, look for a
+card which uses hardware switches/jumpers to select the interface timing speed,
+to allow much faster data transfers than the original 8Mhz ISA bus allows.
+
+ATA = AT (the old IBM 286 computer) Attachment Interface, a draft American
+National Standard for connecting hard drives to PCs.  This is the official
+name for "IDE".
+
+The latest standards define some enhancements, known as the ATA-2 spec,
+which grew out of vendor-specific "Enhanced IDE" (EIDE) implementations.
+
+ATAPI = ATA Packet Interface, a new protocol for controlling the drives,
+similar to SCSI protocols, created at the same time as the ATA2 standard.
+ATAPI is currently used for controlling CDROM and TAPE devices, and will
+likely also soon be used for Floppy drives, removable R/W cartridges,
+and for high capacity hard disk drives.
+
+How To Use *Big* ATA/IDE drives with Linux
+------------------------------------------
+The ATA Interface spec for IDE disk drives allows a total of 28 bits
+(8 bits for sector, 16 bits for cylinder, and 4 bits for head) for addressing
+individual disk sectors of 512 bytes each (in "Linear Block Address" (LBA)
+mode, there is still only a total of 28 bits available in the hardware).
+This "limits" the capacity of an IDE drive to no more than 128GB (Giga-bytes).
+All current day IDE drives are somewhat smaller than this upper limit, and
+within a few years, ATAPI disk drives will raise the limit considerably.
+
+All IDE disk drives "suffer" from a "16-heads" limitation:  the hardware has
+only a four bit field for head selection, restricting the number of "physical"
+heads to 16 or less.  Since the BIOS usually has a 63 sectors/track limit,
+this means that all IDE drivers larger than 504MB (528Meg) must use a "physical"
+geometry with more than 1024 cylinders.
+
+   (1024cyls * 16heads * 63sects * 512bytes/sector) / (1024 * 1024) == 504MB
+
+(Some BIOSs (and controllers with onboard BIOS) pretend to allow "32" or "64"
+ heads per drive (discussed below), but can only do so by playing games with
+ the real (hidden) geometry, which is always limited to 16 or fewer heads).
+
+This presents two problems to most systems:
+
+	1. The INT13 interface to the BIOS only allows 10-bits for cylinder
+	addresses, giving a limit of 1024cyls for programs which use it.
+
+	2. The physical geometry fields of the disk partition table only
+	allow 10-bits for cylinder addresses, giving a similar limit of 1024
+	cyls for operating systems that do not use the "sector count" fields
+	instead of the physical Cyl/Head/Sect (CHS) geometry fields.
+
+Neither of these limitations affects Linux itself, as it (1) does not use the
+BIOS for disk access, and it (2) is clever enough to use the "sector count"
+fields of the partition table instead of the physical CHS geometry fields.
+
+	a) Most folks use LILO to load linux.  LILO uses the INT13 interface
+	to the BIOS to load the kernel at boot time.  Therefore, LILO can only
+	load linux if the files it needs (usually just the kernel images) are
+	located below the magic 1024 cylinder "boundary" (more on this later).
+
+	b) Many folks also like to have bootable DOS partitions on their
+	drive(s).  DOS also uses the INT13 interface to the BIOS, not only
+	for booting, but also for operation after booting.  Therefore, DOS
+	can normally only access partitions which are contained entirely below
+	the magic 1024 cylinder "boundary".
+
+There are at least seven commonly used schemes for kludging DOS to work
+around this "limitation".  In the long term, the problem is being solved
+by introduction of an alternative BIOS interface that does not have the
+same limitations as the INT13 interface.  New versions of DOS are expected
+to detect and use this interface in systems whose BIOS provides it.
+
+But in the present day, alternative solutions are necessary.
+
+The most popular solution in newer systems is to have the BIOS shift bits
+between the cylinder and head number fields.  This is activated by entering
+a translated logical geometry into the BIOS/CMOS setup for the drive.
+Thus, if the drive has a geometry of 2100/16/63 (CHS), then the BIOS could
+present a "logical" geometry of 525/64/63 by "shifting" two bits from the
+cylinder number into the head number field for purposes of the partition table,
+CMOS setup, and INT13 interfaces.  Linux kernels 1.1.39 and higher detect and
+"handle" this translation automatically, making this a rather painless solution
+for the 1024 cyls problem.  If for some reason Linux gets confused (unlikely),
+then use the kernel command line parameters to pass the *logical* geometry,
+as in:  hda=525,64,63
+
+If the BIOS does not support this form of drive translation, then several
+options remain, listed below in inverse order of popularity:
+
+	- boot from a floppy disk instead of the hard drive (takes 10 seconds).
+	- use a partition below the 1024 cyl boundary to hold the linux
+	boot files (kernel images and /boot directory), and place the rest
+	of linux anywhere else on the drive.  These files can reside in a DOS
+	partition, or in a tailor-made linux boot partition.
+
+If you cannot use drive translation, *and* your BIOS also restricts you to
+entering no more than 1024 cylinders in the geometry field in the CMOS setup,
+then just set it to 1024.  As of v3.5 of this driver, Linux automatically
+determines the *real* number of cylinders for fdisk to use, allowing easy
+access to the full disk capacity without having to fiddle around.
+
+Regardless of what you do, all DOS partitions *must* be contained entirely
+within the first 1024 logical cylinders.  For a 1Gig WD disk drive, here's
+a good "half and half" partitioning scheme to start with:
+
+	geometry = 2100/16/63
+	/dev/hda1 from cyl    1 to  992		dos
+	/dev/hda2 from cyl  993 to 1023		swap
+	/dev/hda3 from cyl 1024 to 2100		linux
+
+To ensure that LILO can boot linux, the boot files (kernel and /boot/*)
+must reside within the first 1024 cylinders of the drive.  If your linux
+root partition is *not* completely within the first 1024 cyls (quite common),
+then you can use LILO to boot linux from files on your DOS partition
+by doing the following after installing slackware (or whatever):
+
+	0. Boot from the "boot floppy" created during the installation
+        1. Mount your DOS partition as /dos (and stick it in /etc/fstab)
+        2. Move your kernel (/vmlinuz) to /dos/vmlinuz with:  mv /vmlinuz /dos
+        3. Edit /etc/lilo.conf to change /vmlinuz to /dos/vmlinuz 
+        4. Move /boot to /dos/boot with:  cp -a /boot /dos ; rm -r /boot
+        5. Create a symlink for LILO to use with:  ln -s /dos/boot /boot
+        6. Re-run LILO with:  lilo
+
+	A danger with this approach is that whenever an MS-DOS "defragmentation"
+	program is run (like Norton "speeddisk"), it may move the Linux boot
+	files around, confusing LILO and making the (Linux) system unbootable.
+	Be sure to keep a kernel "boot floppy" at hand for such circumstances.
+
+If you "don't do DOS", then partition as you please, but remember to create
+a small partition to hold the /boot directory (and vmlinuz) as described above
+such that they stay within the first 1024 cylinders.
+
+Note that when creating partitions that span beyond cylinder 1024,
+Linux fdisk will complain about "Partition X has different physical/logical
+endings" and emit messages such as "This is larger than 1024, and may cause
+problems with some software".   Ignore them for linux partitions.  The "some
+software" refers to DOS, the BIOS, and LILO, as described previously.
+
+Western Digital now ships a "DiskManager 6.03" diskette with all of their big
+hard drives.  Burn it!  That idiotic piece of garbage isn't even universally
+compatible with DOS, let alone other operating systems like Linux.  Eventually
+some kind person will kludge Linux to work with it, but at present the two
+are completely incompatible.  If you have this version of DiskManager on your
+hard disk already, it can be exterminated at the expense of all data on the
+drive (back it up elsewhere), by using the "DM" command from the diskette
+as follows:   DM /Y-
+
+mlord@bnr.ca

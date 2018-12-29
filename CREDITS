@@ -1,0 +1,984 @@
+	This is at least a partial credits-file of people that have
+	contributed to the linux project.  It is sorted by name, and
+	formatted in a format that allows for easy grepping and
+	beautification by scripts.  The fields are: name (N), email (E),
+	description (D) and snail-mail address (S).  Thanks,
+
+			Linus
+----------
+
+M: Matti Aarnio
+E: mea@utu.fi
+D: Dynamicized network socket allocations, LILO for AHA1542
+
+N: Werner Almesberger
+E: almesber@bernina.ethz.ch
+D: dosfs, LILO, some fd features, various other hacks here and there
+
+N: Derek Atkins
+E: warlord@MIT.EDU
+D: Linux-AFS Port, random kernel hacker,
+D: VFS fixes (new notify_change in particular)
+D: Moving all VFS access checks into the file systems
+S: MIT Room E15-341
+S: 20 Ames Street
+S: Cambridge, Massachusetts  02139
+S: USA
+
+N: John Aycock
+E: aycock@cpsc.ucalgary.ca
+D: Adaptec 274x driver
+S: Department of Computer Science
+S: University of Calgary
+S: Calgary, Alberta, Canada
+
+N: Ralf Baechle
+E: ralf@waldorf-gmbh.de
+D: Linux/MIPS port
+D: Linux/68k hacker
+S: Hauptstrasse 19
+S: 79837 St. Blasien
+S: Germany
+
+N: Krishna Balasubramanian
+E: balasub@cis.ohio-state.edu
+D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
+
+N: Dario Ballabio
+E: dario@milano.europe.dg.com
+D: Author and maintainer of the Ultrastor 14F/34F SCSI driver
+D: Author and maintainer of the EATA ISA/EISA SCSI driver
+S: Data General Corporation
+S: Milano
+S: Italy
+
+N: Arindam Banerji
+E: axb@cse.nd.edu
+D: Contributed ESDI driver routines needed to port LINUX to the PS/2 MCA.
+S: Department of Computer Science & Eng.
+S: University of Notre Dame
+S: Notre Dame, Indiana
+S: USA
+
+N: Peter Bauer
+E: 100136.3530@compuserve.com
+D: Driver for depca-ethernet-board
+S: 69259 Wilhemsfeld
+S: Rainweg 15
+S: Germany
+
+N: Fred Baumgarten
+E: dc6iq@insu1.etec.uni-karlsruhe.de
+D: NET-2 & netstat(8)
+S: Kandelstrasse 27
+S: 76297 Stutensee
+S: Germany
+
+N: Donald Becker
+E: becker@cesdis.gsfc.nasa.gov
+D: General low-level networking hacker
+D: Most of the ethercard drivers
+D: Original author of the NFS server
+S: USRA Center of Excellence in Space Data and Information Sciences
+S: Code 930.5, Goddard Space Flight Center
+S: Greenbelt, Maryland 20771
+S: USA
+
+N: Randolph Bentson
+E: bentson@grieg.seaslug.org
+D: author of driver for Cyclades Cyclom-Y async mux
+S: 2500 Gilman Dr W, #404
+S: Seattle, Washington 98119-2102
+S: USA
+
+N: Stephen R. van den Berg (AKA BuGless)
+E: berg@pool.informatik.rwth-aachen.de
+D: General kernel, gcc, and libc hacker
+D: Specialisation: tweaking, ensuring portability, tweaking, cleaning,
+D: tweaking and occasionally debugging :-)
+S: Bouwensstraat 22
+S: 6369 BG Simpelveld
+S: The Netherlands
+
+N: Hennus Bergman
+E: hennus@sky.ow.nl [My uucp-fed Linux box at home]
+D: Author and maintainer of the QIC-02 tape driver
+S: The Netherlands
+
+N: Ross Biro
+E: bir7@leland.Stanford.Edu
+D: Original author of the Linux networking code
+
+N: Bill Bogstad
+E: bogstad@cs.jhu.edu
+D: Wrote /proc/self patch
+S: Johns Hopkins University
+S: Computer Science Department
+S: Baltimore, Maryland 21218
+S: USA
+
+N: John Boyd
+E: boyd@cis.ohio-state.edu
+D: Co-author of wd7000 SCSI driver
+S: 101 Curl Drive #591
+S: Columbus, Ohio 43210
+S: USA
+
+N: Andries Brouwer
+E: aeb@cwi.nl
+D: International character handling for keyboard and console
+S: Bessemerstraat 21
+S: Amsterdam
+S: The Netherlands
+
+N: Michael Callahan
+E: callahan@maths.ox.ac.uk
+D: PPP for Linux
+S: The Mathematical Institute
+S: 25-29 St Giles
+S: Oxford
+S: United Kingdom
+
+N: Remy Card
+E: Remy.Card@masi.ibp.fr
+E: Remy.Card@linux.org
+D: Extended file system designer and developer
+D: Second extended file system designer and developer
+S: Institut Blaise Pascal
+S: 4 Place Jussieu
+S: 75252 Paris Cedex 05
+S: France
+
+N: Ed Carp
+E: ecarp@netcom.com
+D: uucp, elm, pine, pico port
+D: cron, at(1) developer
+S: 48287 Sawleaf
+S: Fremont, California 94539
+S: USA
+
+N: Raymond Chen
+E: raymondc@microsoft.com
+D: Author of Configure script
+S: 14509 NE 39th Street #1096
+S: Bellevue, Washington 98007
+S: USA
+
+N: Alan Cox
+E: A.Cox@swansea.ac.uk
+E: iiitac@pyr.swan.ac.uk
+E: gw4pts@gw4pts.ampr.org
+E: GW4PTS@GB7SWN (packet radio)
+D: NET2Debugged author
+D: Network layer debugging
+D: AX.25 & IPX alpha releases
+
+N: Laurence Culhane
+E: loz@holmes.demon.co.uk
+D: Wrote the initial alpha SLIP code
+S: 81 Hood Street
+S: Northampton
+S: NN1 3QT
+S: United Kingdom
+
+N: Wayne Davison
+E: davison@borland.com
+D: Second extended file system co-designer
+
+N: Terry Dawson
+E: terryd@extro.ucc.su.oz.au
+E: vk2ktj@gw.vk2ktj.ampr.org (Amateur Radio use only)
+D: NET-2-HOWTO author.
+D: RADIOLINUX Amateur Radio software for Linux list collator.
+
+N: Todd J. Derr
+E: tjd@cs.pitt.edu
+D: maintainer of dual-monitor patches for 1.0+
+D: MouseMan driver for selection
+S: Department of Computer Science
+S: University of Pittsburgh
+S: Pittsburgh, Pennsylvania 15260
+S: USA
+
+N: Thomas Dunbar
+E: tdunbar@vtaix.cc.vt.edu
+D: TeX & METAFONT hacking/maintenance
+S: Dean, Graduate School
+S: Virginia Tech
+S: Blacksburg, Virginia 24061
+S: USA
+
+N: Torsten Duwe
+E: Torsten.Duwe@informatik.uni-erlangen.de
+D: Part-time kernel hacker
+D: The Linux Support Team Erlangen
+S: Grevenbroicher Str. 17
+S: 47807 Krefeld
+S: Germany
+
+N: Drew Eckhardt
+E: drew@Colorado.EDU
+D: SCSI code
+D: Assorted snippets elsewhere
+D: Boot sector "..." printing
+S: 2255 Spruce
+S: Boulder, Colorado 80302
+S: USA
+
+N: Bjorn Ekwall
+E: bj0rn@blox.se
+D: Extended support for loadable modules
+D: D-Link pocket adapter drivers
+S: Myrstuguv. 83
+S: S-143 32 VARBY
+S: Sweden
+
+N: Doug Evans
+E: dje@cygnus.com
+D: Wrote Xenix FS (part of standard kernel since 0.99.15)
+
+N: Rik Faith
+E: faith@cs.unc.edu
+D: Future Domain TMC-16x0 SCSI driver
+
+N: Juergen Fischer
+E: fischer@server.et-inf.fho-emden.de
+D: Author of Adaptec AHA-152x scsi driver
+S: Schulstrasse 18
+S: 26506 Norden
+S: Germany
+
+N: Jeremy Fitzhardinge
+E: jeremy@sw.oz.au
+D: Improved mmap and munmap handling
+D: General mm minor tidyups
+S: 99 Albermarle Street
+S: Newtown 2042
+S: Australia
+
+N: Ralf Flaxa
+E: rfflaxa@immd4.informatik.uni-erlangen.de
+D: The Linux Support Team Erlangen
+
+N: Lawrence Foard
+E: entropy@world.std.com
+D: Floppy track reading, fs code
+S: 217 Park Avenue, Suite 108
+S: Worcester, Massachusetts 01609
+S: USA
+
+N: Karl Fogel
+E: kfogel@cs.oberlin.edu
+D: Contributor, Linux User's Guide
+S: 1123 North Oak Park Avenue
+S: Oak Park, Illinois 60302
+S: USA
+
+N: Nigel Gamble
+E: nigel@nrg.org
+E: nigel@sgi.com
+D: Interrupt-driven printer driver
+S: 765 N Rengstorff Ave, Apartment 7
+S: Mountain View, California 94043-2420
+S: USA
+
+N: Jacques Gelinas
+E: jacques@solucorp.qc.ca
+D: Author of the Umsdos file system
+S: 1326 De Val-Brillant
+S: Laval, Quebec
+S: Canada H7Y 1V9
+
+N: David Gentzel
+E: gentzel@nova.enet.dec.com
+D: BusLogic driver and original UltraStor driver
+S: Whitfield Software Services
+S: 631 Idlewood Avenue
+S: Carnegie, Pennsylvania 15106-1126
+S: USA
+
+N: Philip Gladstone
+E: philipg@onsett.com
+D: Kernel / timekeeping stuff
+
+N: Bruno Haible
+E: haible@ma2s2.mathematik.uni-karlsruhe.de
+D: Unified SysV FS based on Xenix FS (part of standard kernel since 0.99.15)
+S: Augartenstrasse 40
+S: D - 76137 Karlsruhe
+S: Germany
+
+N: Greg Hankins
+E: gregh@cc.gatech.edu
+D: fixed keyboard driver to separate LED and locking status
+S: 25360 Georgia Tech Station
+S: Atlanta, Georgia 30332
+S: USA
+
+N: Andrew Haylett
+E: ajh@primag.co.uk
+D: Selection mechanism
+
+N: Jochen Hein
+E: Hein@Informatik.TU-Clausthal.de
+D: National Language Support
+D: German Support-Disks for SLS/Slackware called SLT
+D: Linux Internationalization Project
+D: DOSemu
+S: Muehlenweg 19
+S: 34266 Niestetal
+S: Germany
+
+N: Michael Hipp
+E: mhipp@student.uni-tuebingen.de
+D: drivers for the racal ni5210 & ni6510 ethernet-boards
+S: Talstr. 1
+S: D - 72072 Tuebingen
+S: Germany
+
+N: Dirk Hohndel
+E: hohndel@aib.com
+D: The XFree86[tm] Project
+S: AIB Software Corporation
+S: 46030 Manekin Plaza, Suite 160
+S: Dulles, Virginia 20166
+S: USA
+
+N: Nick Holloway
+E: Nick.Holloway@alfie.demon.co.uk
+E: Nick.Holloway@parallax.co.uk
+D: Small patches for kernel, libc
+D: MAKEDEV
+S: 15 Duke Street
+S: Chapelfields
+S: Coventry
+S: CV5 8BZ
+S: United Kingdom
+
+N: Ron Holt
+E: ron@novell.com
+D: Kernel development
+D: Contributed to kernel Wabi/Wine support
+S: Novell, Inc.
+S: 1700 South 122 East, Mailstop CP-1
+S: Provo, Utah 84606
+S: USA
+
+N: Rob W. W. Hooft
+E: hooft@EMBL-Heidelberg.DE
+D: Shared libs for graphics-tools and for the f2c compiler
+D: Some kernel programming on the floppy and sound drivers in early days
+D: Some other hacks to get different kinds of programs to work for linux
+S: Panoramastrasse 18
+S: D-69126 Heidelberg
+S: Germany
+
+N: Ian Jackson
+E: iwj10@cus.cam.ac.uk
+E: ijackson@nyx.cs.du.edu
+D: FAQ maintainer and poster of the daily postings
+D: FSSTND group member
+D: Debian core team member and maintainer of several Debian packages
+S: 2 Lexington Close
+S: Cambridge
+S: CB3 0DS
+S: United Kingdom
+
+N: Mike Jagdis
+E: jaggy@purplet.demon.co.uk
+E: Mike.Jagdis@purplet.demon.co.uk
+D: iBCS personalities, socket and X interfaces, x.out loader, syscalls...
+D: Purple Distribution maintainer
+D: UK FidoNet support
+D: ISODE && PP
+D: Kernel and device driver hacking
+S: 280 Silverdale Road
+S: Earley
+S: Reading
+S: RG6 2NU
+S: United Kingdom
+
+N: Michael K. Johnson
+E: johnsonm@sunsite.unc.edu
+D: The Linux Documentation Project
+D: Kernel Hackers' Guide
+D: Procps
+D: Proc filesystem
+D: Maintain tsx-11.mit.edu
+D: LP driver
+S: 201 Howell Street, Apartment 1C
+S: Chapel Hill, North Carolina 27514-4818
+S: USA
+
+N: Fred N. van Kempen
+E: waltje@uwalt.nl.mugnet.org
+D: NET-2
+D: Drivers
+D: Kernel cleanups
+S: Hoefbladhof 27
+S: 2215 DV Voorhout
+S: The Netherlands
+
+N: Olaf Kirch
+E: okir@monad.swb.de
+D: Author of the Linux Network Administrators' Guide
+S: Kattreinstr 38
+S: D-64295
+S: Germany
+
+N: Ian Kluft
+E: ikluft@thunder.sbay.org
+D: Smail binary packages for Slackware and Debian
+S: 2200 Monroe Street #1509
+S: Santa Clara, California 95050-3452
+S: USA
+
+N: Alain L. Knaff
+E: Alain.Knaff@imag.fr
+D: floppy driver
+S: Appartement 310B
+S: 11, rue General Mangin
+S: 38100 Grenoble
+S: France
+
+N: Harald Koenig
+E: koenig@tat.physik.uni-tuebingen.de
+D: XFree86 (S3), DCF77, some kernel hacks and fixes
+S: Koenigsberger Str. 90
+S: D-72336 Balingen
+S: Germany
+
+N: Rudolf Koenig
+E: rfkoenig@immd4.informatik.uni-erlangen.de
+D: The Linux Support Team Erlangen
+
+N: Bas Laarhoven
+E: bas@vimec.nl
+D: Loadable modules and ftape driver
+S: Mr. v. Boemellaan 39
+S: NL-5237 KA 's-Hertogenbosch
+S: The Netherlands
+
+N: Kevin Lentin
+E: kevinl@cs.monash.edu.au
+D: NCR53C400/T130B SCSI extension to NCR5380 driver.
+S: 18 Board Street
+S: Doncaster VIC 3108
+S: Australia
+
+N: Hans Lermen
+E: lermen@elserv.ffm.fgan.de
+D: Author of the LOADLIN Linux loader
+S: Am Muehlenweg 38
+S: D53424 Remagen
+S: Germany
+
+N: Mark Lord
+E: mlord@bnr.ca
+E: mlord@achilles.net
+D: IDE drive support in hd.c
+S: 33 Ridgefield Cr
+S: Nepean, Ontario
+S: Canada K2H 6S3
+
+N: Warner Losh
+E: imp@boulder.parcplace.com
+D: Provided OI/OB for Linux, general hacker
+S: 4909 Pearl East Circle, Suite 200
+S: Boulder, Colorado 80303
+S: USA
+
+N: H.J. Lu
+E: hjl@nynexst.com
+D: GCC + libraries hacker
+
+N: Tuomas J. Lukka
+E: Tuomas.Lukka@Helsinki.FI
+D: Original dual-monitor patches
+D: Console-mouse-tracking patches
+S: Puistokaari 1 E 18
+S: 00200 Helsinki
+S: Finland
+
+N: Kai M"akisara
+E: Kai.Makisara@metla.fi
+D: SCSI Tape Driver
+
+N: Hamish Macdonald
+E: hamish@border.ocunix.on.ca
+D: Linux/68k port
+S: 102-B Valleystream Drive
+S: Nepean, Ontario
+S: Canada K2H-9E1
+
+N: Peter MacDonald
+D: SLS distribution
+D: Initial implementation of VC's, pty's and select()
+
+N: James B. MacLean
+E: jmaclean@fox.nstn.ns.ca
+D: Coordinator of DOSEMU releases
+D: Program in DOSEMU
+S: PO BOX 220, HFX. CENTRAL
+S: Halifax, Nova Scotia
+S: Canada B3J 3C8
+
+N: Pat Mackinlay
+E: pat@it.com.au
+D: 8 bit XT hard disk driver
+D: Miscellaneous ST0x, TMC-8xx and other SCSI hacking
+S: 25 McMillan Street
+S: Victoria Park 6100
+S: Australia
+
+N: John A. Martin
+E: jam@acm.org
+D: FSSTND contributor
+D: Credit file compilator
+
+N: Kevin E. Martin
+E: martin@cs.unc.edu
+D: Developed original accelerated X servers included in XFree86
+D: XF86_Mach64 (forthcoming -- please don't ask when)
+D: XF86_Mach32
+D: XF86_Mach8
+D: XF86_8514
+D: cfdisk (curses based disk partitioning program)
+
+N: Bradley McLean
+E: brad@bradpc.gaylord.com
+D: Device driver hacker
+D: General kernel debugger
+S: 249 Nichols Avenue
+S: Syracuse, New York 13206
+S: USA
+
+N: Dirk Melchers
+E: dirk@merlin.nbg.sub.org
+D: 8 bit XT hard disk driver for OMTI5520
+S: Branderweg 4
+S: D-91058 Erlangen
+S: Germany
+
+N: Craig Metz
+E: cmetz@tjhsst.edu
+D: Some of PAS 16 mixer & PCM support
+S: 12305 Country Ridge Lane
+S: Fairfax, Virginia 22033
+S: USA
+
+N: William (Bill) Metzenthen
+E: billm@vaxc.cc.monash.edu.au
+E: billm@jacobi.maths.monash.edu.au
+D: Author of the FPU emulator.
+D: Minor kernel hacker for other lost causes (Hercules mono, etc).
+S: 22 Parker Street
+S: Ormond
+S: Victoria 3163
+S: Australia
+
+N: Pauline Middelink
+E: middelin@polyware.iaf.nl
+D: General low-level bug fixes, /proc fixes, identd support
+S: Boterkorfhoek 34
+S: 7546 JA  Enschede
+S: Netherlands
+
+N: David S. Miller
+E: davem@caip.rutgers.edu
+D: Sparc hacker
+D: New Linux-Activists maintainer
+D: Linux Emacs elf/qmagic support + other libc/gcc things
+D: Yee bore de yee bore! ;-)
+S: 2 Bristol Court
+S: East Brunswick, New Jersey 08816
+S: USA
+
+N: Rick Miller
+E: rick@discus.mil.wi.us
+D: Linux Device Registrar (Major/minor numbers), "au-play", "bwBASIC"
+S: S78 W16203 Woods Road
+S: Muskego, Wisconsin 53150
+S: USA
+
+N: Harald Milz
+E: hm@ix.de
+D: Linux Projects Map, Linux Commercial-HOWTO
+D: general Linux publicity in Germany, vacation port
+D: UUCP and CNEWS binary packages for LST
+S: Editorial Board iX Mag
+S: Helstorfer Str. 7
+S: D-30625 Hannover
+S: Germany
+
+N: Corey Minyard
+E: minyard@wf-rch.cirr.com
+D: Sony CDU31A CDROM Driver
+S: 1805 Marquette
+S: Richardson, Texas 75081
+S: USA
+
+N: Eberhard Moenkeberg
+E: emoenke@gwdg.de
+D: CDROM driver "sbpcd" (Matsushita/Panasonic/Soundblaster)
+S: Reinholdstrasse 14
+S: D-37083 Goettingen
+S: Germany
+
+N: Ian A. Murdock
+E: imurdock@gnu.ai.mit.edu
+D: Creator of Debian distribution
+S: 30 White Tail Lane
+S: Lafayette, Indiana 47905
+S: USA
+
+N: Johan Myreen
+E: jem@vipunen.hut.fi
+D: PS/2 mouse driver writer etc.
+S: Dragonvagen 1 A 13
+S: FIN-00330 Helsingfors
+S: Finland
+
+N: Michael Neuffer
+E: neuffer@goofy.zdv.uni-mainz.de
+D: developer and maintainer of the eata_dma SCSI driver 
+S: Zum Schiersteiner Grund 2
+S: 55127 Mainz
+S: Germany
+
+N: David C. Niemi
+E: niemidc@clark.net
+E: niemidc@slma.com
+D: FSSTND, The XFree86 Project
+D: DMA memory support, floppy driver
+S: 2364 Old Trail Drive
+S: Reston, Virginia 22091
+S: USA
+
+N: Michael O'Reilly
+E: michael@iinet.com.au
+E: oreillym@tartarus.uwa.edu.au
+D: Wrote the original dynamic sized disk cache stuff. I think the only
+D: part that remains is the GFP_KERNEL et al #defines. :)
+S: 192 Nichsolson Road
+S: Subiaco, 6008
+S: Perth, Western Australia
+S: Australia
+
+N: Greg Page
+E: greg@caldera.com
+D: IPX development and support
+
+N: Kai Petzke
+E: wpp@marie.physik.tu-berlin.de
+D: Driver for Laser Magnetic Storage CD-ROM
+D: Some kernel bug fixes, new swapping routine
+D: Port of the database Postgres
+S: Stresemannstr. 62
+S: 10963 Berlin
+S: Germany
+
+N: Ken Pizzini
+E: ken@halcyon.com
+D: CDROM driver "sonycd535" (Sony CDU-535/531)
+S: 
+
+N: Frederic Potter 
+E: Frederic.Potter@masi.ibp.fr 
+D: Some PCI kernel support
+
+N: Stefan Probst
+E: snprobst@immd4.informatik.uni-erlangen.de
+D: The Linux Support Team Erlangen
+
+N: Daniel Quinlan
+E: quinlan@yggdrasil.com
+D: FSSTND Coordinator
+S: 816 Saratoga Avenue, Apartment M208
+S: San Jose, California 95129
+S: USA
+
+N: Florian La Roche
+E: rzsfl@rz.uni-sb.de
+E: flla@stud.uni-sb.de
+D: Net programs and kernel net hacker
+S: Gaildorfer Str. 27
+S: 7000 Stuttgart 50
+S: Germany
+
+N: Stephen Rothwell
+E: sfr@pdact.pd.necisa.oz.au
+D: Boot/setup/build work for setup > 2K
+S: 59 Bugden Avenue
+S: Gowrie ACT 2904
+S: Australia
+
+N: Alessandro Rubini
+E: rubini@ipvvis.unipv.it
+D: the gpm mouse server and kernel support for it
+
+N: Robert Sanders
+E: gt8134b@prism.gatech.edu
+D: Dosemu
+
+N: Hannu Savolainen
+E: hannu@voxware.pp.fi
+D: Kernel sound drivers
+S: Hiekkalaiturintie 3 A 8
+S: 00980 Helsinki
+S: Finland
+
+N: Peter De Schrijver
+E: stud11@cc4.kuleuven.ac.be
+D: Mitsumi CD-ROM driver patches March version
+S: Molenbaan 29
+S: B2240 Zandhoven
+S: Belgium
+
+N: Darren Senn
+E: sinster@scintilla.santa-clara.ca.us
+D: Whatever I notice needs doing (so far: itimers, /proc)
+S: 620 Park View Drive #206
+S: Santa Clara, California 95054
+S: USA
+
+N: Rick Sladkey
+E: jrs@world.std.com
+D: utility hacker: Emacs, NFS server, mount, kmem-ps, UPS debugger, strace, GDB
+D: library hacker: RPC, profil(3), realpath(3), regexp.h
+D: kernel hacker: unnamed block devs, NFS client, fast select, precision timer
+S: 24 Avon Place
+S: Arlington, Massachusetts 02174
+S: USA
+
+N: Chris Smith
+E: csmith@convex.com
+D: HPFS filesystem
+S: Richardson, Texas
+S: USA
+
+N: Scott Snyder
+E: snyder@fnald0.fnal.gov
+D: ATAPI cdrom driver
+S: MS 352, Fermilab
+S: Post Office Box 500
+S: Batavia, Illinois 60510
+S: USA
+
+N: Drew Sullivan
+E: drew@lethe.north.net
+D: iBCS2 developer
+S: 22 Irvington Cres.
+S: Willowdale, Ontario
+S: Canada M2N 2Z1
+
+N: Tommy Thorn
+E: Tommy.Thorn@daimi.aau.dk
+D: Device driver hacker (aha1542 & plip)
+S: Aarhus University
+S: Computer Science Department
+S: Ny Munkegade 116
+S: DK-8000 Aarhus C
+S: Denmark
+
+N: Jon Tombs
+E: jon@gtex02.us.es
+D: NFS mmap()
+D: XF86_S3
+D: Kernel modules
+S: C/ Carlos de Cepeda 36 2-5
+S: Sevilla 41005
+S: Spain
+
+N: Linus Torvalds
+E: Linus.Torvalds@Helsinki.FI
+D: General kernel hacker
+S: Kalevankatu 55 B 37
+S: 00180 Helsinki
+S: Finland
+
+N: Jeff Tranter
+E: Jeff_Tranter@Mitel.COM
+D: Enhancements to Joystick driver
+D: Author of Sound HOWTO and CD-ROM HOWTO
+D: Author of several small utilities
+D: (bogomips, scope, eject, statserial)
+S: 1 Laurie Court
+S: Kanata, Ontario
+S: CANADA K2L 1S2
+
+N: Theodore Ts'o
+E: tytso@mit.edu
+D: Random Linux hacker
+D: Maintainer of tsx-11.mit.edu ftp archive
+D: Maintainer of c.o.l.* Usenet<->mail gateway
+D: Author of serial driver
+D: Author of the new e2fsck
+D: Author of job control and system call restart code
+D: Author of ramdisk device driver
+D: Author of loopback device driver
+S: MIT Room E40-343
+S: 1 Amherst Street
+S: Cambridge, Massachusetts 02139
+S: USA
+
+N: Simmule Turner
+E: simmy@digex.com
+D: Added swapping to filesystem
+S: 8504 16th Street #406
+S: Silver Spring, Maryland 20910
+S: USA
+
+N: Stephen Tweedie
+E: sct@dcs.ed.ac.uk
+D: Second extended file system developer
+D: General filesystem hacker
+S: Dept. of Computer Science
+S: University of Edinburgh
+S: JCMB, The King's Buildings
+S: Mayfield Road
+S: Edinburgh 
+S: EH9 3JZ
+S: United Kingdom
+
+N: Thomas Uhl
+E: uhl@sun1.rz.fh-heilbronn.de
+D: Application programmer
+D: Linux promoter
+D: Author of a German book on Linux
+S: Obere Heerbergstrasse 17
+S: 97078 Wuerzburg
+S: Germany
+
+N: Jeffrey A. Uphoff
+E: juphoff@nrao.edu
+E: jeff.uphoff@linux.org
+D: 'dip' contributor.
+D: AIPS port, astronomical community support.
+S: National Radio Astronomy Observatory
+S: 520 Edgemont Road
+S: Charlottesville, Virginia 22903
+S: USA
+
+N: Matthias Urlichs
+E: urlichs@noris.de
+E: urlichs@smurf.sub.org
+D: Consultant, developer, kernel hacker
+D: Playing with Streams, ISDN, and BSD networking code for Linux
+S: Schleiermacherstrasse 12
+S: 90491 Nuernberg
+S: Germany
+
+N: Patrick Volkerding
+E: volkerdi@ftp.cdrom.com
+D: Produced the Slackware distribution, updated the SVGAlib
+D: patches for ghostscript, worked on color 'ls', etc.
+S: 301 15th Street S.
+S: Moorhead, Minnesota 56560
+S: USA 
+
+N: Juergen Weigert
+E: jnweiger@immd4.informatik.uni-erlangen.de
+D: The Linux Support Team Erlangen
+
+N: Matt Welsh
+E: mdw@sunsite.unc.edu
+D: Linux Documentation Project coordinator
+D: Author, Linux Installation and Getting Started
+D: HOWTO coordinator and writer
+D: Maintainer of sunsite.unc.edu Linux doc archives
+D: Moderator, comp.os.linux.announce
+S: 205 Gray Street NE
+S: Wilson, North Carolina 27893
+S: USA
+
+
+N: Marco van Wieringen
+E: mvw@mercury.mcs.nl.mugnet.org
+D: Author of acct and quota
+S: Breeburgsingel 12
+S: 2135 CN Hoofddorp
+S: The Netherlands
+
+N: Stephen D. Williams
+E: sdw@lig.net
+E: sdw@meaddata.com
+D: Consultant, entrepreneur, developer
+S: 2464 Rosina Drive
+S: Dayton, Ohio 45342-6430
+S: USA
+
+N: G\"unter Windau
+E: gunter@mbfys.kun.nl
+D: Some bug fixes in the polling printer driver (lp.c)
+S: University of Nijmegen
+S: Geert-Grooteplein Noord 21
+S: 6525 EZ Nijmegen
+S: The Netherlands
+
+N: Lars Wirzenius
+E: lars.wirzenius@helsinki.fi
+D: Linux System Administrator's Guide
+D: Co-moderator, comp.os.linux.announce
+D: Original sprintf in kernel
+D: Personal information about Linus
+D: Original kernel README
+D: Linux News (electronic magazine)
+D: Meta-FAQ, originator
+D: INFO-SHEET, former maintainer
+D: Author of the longest-living linux bug
+S: Ohratie 16 C 198
+S: sf-01370 Vantaa
+S: Finland
+
+N: Roger E. Wolff
+E: wolff@dutecai.et.tudelft.nl
+D: Written kmalloc/kfree
+S: Oosterstraat 23
+S: 2611 TT Delft
+S: The Netherlands
+
+N: Frank Xia
+E: qx@math.columbia.edu
+D: Xiafs filesystem
+S: 542 West 112th Street, 5N
+S: New York, New York 10025
+S: USA
+
+N: Eric Youngdale
+E: eric@aib.com
+D: General kernel hacker
+D: SCSI iso9660 and ELF
+S: 17 Canterbury Square #101
+S: Alexandria, Virginia 22304
+S: USA
+
+N: Niibe Yutaka
+E: gniibe@mri.co.jp
+D: PLIP driver
+D: Asynchronous socket I/O in the NET code
+S: Mitsubishi Research Institute, Inc.
+S: ARCO Tower 1-8-1 Shimomeguro Meguro-ku
+S: Tokyo 153
+S: Japan
+
+N: Orest Zborowski
+E: orestz@eskimo.com
+D: XFree86 and kernel development
+S: 1507 145th Place SE #B5
+S: Bellevue, Washington 98007
+S: USA
+
+N: Werner Zimmermann
+E: zimmerma@rz.fht-esslingen.de
+D: CDROM driver "aztcd" (Aztech/Okano/Orchid/Wearnes)
+S: Flandernstrasse 101
+S: D-73732 Esslingen
+S: Germany
+
+N: Leonard N. Zubkoff
+E: lnz@dandelion.com
+D: XFree86 and BusLogic driver additions
+S: 3078 Sulphur Spring Court
+S: San Jose, California 95148
+S: USA
