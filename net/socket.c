@@ -610,7 +610,7 @@ static int sock_socket(int family, int type, int protocol)
 
 	/* Locate the correct protocol family. */
 	for (i = 0; i < NPROTO; ++i) 
-	{
+	{	// 从props数组中找到family协议对应的操作函数集，props由系统初始化时sock_register进行操作
 		if (pops[i] == NULL) continue;
 		if (pops[i]->family == family) 
 			break;
@@ -620,7 +620,7 @@ static int sock_socket(int family, int type, int protocol)
 	{
   		return -EINVAL;
 	}
-
+	// 函数集
 	ops = pops[i];
 
 /*
@@ -628,7 +628,7 @@ static int sock_socket(int family, int type, int protocol)
  *	the protocol makes sense here. The family can still reject the
  *	protocol later.
  */
-  
+	// 检查一下类型
 	if ((type != SOCK_STREAM && type != SOCK_DGRAM &&
 		type != SOCK_SEQPACKET && type != SOCK_RAW &&
 		type != SOCK_PACKET) || protocol < 0)
@@ -742,7 +742,7 @@ static int sock_bind(int fd, struct sockaddr *umyaddr, int addrlen)
 
 	if (fd < 0 || fd >= NR_OPEN || current->files->fd[fd] == NULL)
 		return(-EBADF);
-	
+	// 通过文件描述符找到对应的socket	
 	if (!(sock = sockfd_lookup(fd, NULL))) 
 		return(-ENOTSOCK);
   
@@ -779,7 +779,7 @@ static int sock_listen(int fd, int backlog)
 
 	if (sock->ops && sock->ops->listen)
 		sock->ops->listen(sock, backlog);
-	// 设置监听标记位
+	// 设置socket的监听属性，accept函数时用到	
 	sock->flags |= SO_ACCEPTCON;
 	return(0);
 }
@@ -1293,7 +1293,7 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
  *	advertise its address family, and have it linked into the
  *	SOCKET module.
  */
-// 注释协议簇对应的操作函数集,在pops数组变量中保存 
+// 注册协议簇对应的操作函数集,在pops数组变量中保存 
 int sock_register(int family, struct proto_ops *ops)
 {
 	int i;

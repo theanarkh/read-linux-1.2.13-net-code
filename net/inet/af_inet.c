@@ -464,7 +464,7 @@ static int inet_autobind(struct sock *sk)
 static int inet_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = (struct sock *) sock->data;
-
+	// 如果没有绑定端口则绑定一个，并把sock加到sock_array中
 	if(inet_autobind(sk)!=0)
 		return -EAGAIN;
 
@@ -476,9 +476,12 @@ static int inet_listen(struct socket *sock, int backlog)
 	 */
 	if ((unsigned) backlog > 128)
 		backlog = 128;
+	// 设置syn+已连接队列的最大长度，在tcp.c中用到
 	sk->max_ack_backlog = backlog;
+	// 防止多次调用listen
 	if (sk->state != TCP_LISTEN)
-	{
+	{	
+		// syn+已连接队列长度
 		sk->ack_backlog = 0;
 		sk->state = TCP_LISTEN;
 	}
@@ -526,7 +529,7 @@ static int inet_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	struct proto *prot;
 	int err;
-
+	// 分配一个sock结构体
 	sk = (struct sock *) kmalloc(sizeof(*sk), GFP_KERNEL);
 	if (sk == NULL) 
 		return(-ENOBUFS);
@@ -543,6 +546,7 @@ static int inet_create(struct socket *sock, int protocol)
 			}
 			protocol = IPPROTO_TCP;
 			sk->no_check = TCP_NO_CHECK;
+			// 函数集
 			prot = &tcp_prot;
 			break;
 
@@ -664,6 +668,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->mtu = 576;
 	// 下层的操作函数集
 	sk->prot = prot;
+	// 来自socket结构体的wait字段，wait字段来自inode的wait字段
 	sk->sleep = sock->wait;
 	sk->daddr = 0;
 	sk->saddr = 0 /* ip_my_addr() */;
@@ -703,7 +708,7 @@ static int inet_create(struct socket *sock, int protocol)
 	*sk->ip_mc_name=0;
 	sk->ip_mc_list=NULL;
 #endif
-  	
+  	// 下面两个函数用于阻塞型的网络函数被阻塞时，一旦底层条件符合，则回调下面的函数通知上层，即唤醒进程
 	sk->state_change = def_callback1;
 	sk->data_ready = def_callback2;
 	sk->write_space = def_callback3;
@@ -717,10 +722,11 @@ static int inet_create(struct socket *sock, int protocol)
 	 * creation time automatically
 	 * shares.
 	 */
+		// 根据端口，把sock结构体放到下层协议的sock_srray数组
 		put_sock(sk->num, sk);
 		sk->dummy_th.source = ntohs(sk->num);
 	}
-
+	// 执行底层的初始化函数，tcp和udp都没有init函数
 	if (sk->prot->init) 
 	{
 		err = sk->prot->init(sk);
@@ -843,12 +849,12 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		return(-EIO);
 	if(addr_len<sizeof(struct sockaddr_in))
 		return -EINVAL;
-		
+	// raw是链路层，不需要端口	
 	if(sock->type != SOCK_RAW)
-	{
+	{	// 已经绑定了端口
 		if (sk->num != 0) 
 			return(-EINVAL);
-
+		
 		snum = ntohs(addr->sin_port);
 
 		/*
@@ -856,14 +862,16 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		 * be bound to a privileged port. However, since there seems to
 		 * be a bug here, we will leave it if the port is not privileged.
 		 */
+		// 端口无效则随机获取一个非root才能使用的端口
 		if (snum == 0) 
 		{
 			snum = get_new_socknum(sk->prot, 0);
 		}
+		// 小于1024的端口需要超级用户权限
 		if (snum < PROT_SOCK && !suser()) 
 			return(-EACCES);
 	}
-	
+	// 判断ip
 	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
 	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR && chk_addr_ret != IS_MULTICAST)
 		return(-EADDRNOTAVAIL);	/* Source address MUST be ours! */
@@ -881,7 +889,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		/* should be below! */
 			if (sk2->num != snum) 
 				continue;
-			// 没有设置可重用标记
+			// 端口已经被使用，没有设置可重用标记，比如断开了解后在2msl内是否可以重用
 			if (!sk->reuse)
 			{
 				sti();
@@ -892,6 +900,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 				continue;		/* more than one */
 			if (sk2->saddr != sk->saddr) 
 				continue;	/* socket per slot ! -FB */
+			// 被监听的端口不能同时被使用
 			if (!sk2->reuse || sk2->state==TCP_LISTEN) 
 			{
 				sti();
@@ -899,9 +908,11 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 			}
 		}
 		sti();
-
+		// 保证该sk不在sock_array队列里
 		remove_sock(sk);
+		// 挂载到sock_array里
 		put_sock(snum, sk);
+		// tcp头中的源端口
 		sk->dummy_th.source = ntohs(sk->num);
 		sk->daddr = 0;
 		sk->dummy_th.dest = 0;
@@ -1073,6 +1084,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	}
 	// 互相关联
 	newsock->data = (void *)sk2;
+	// 复制socket结构的wait字段，用于控制进程的阻塞和唤醒
 	sk2->sleep = newsock->wait;
 	sk2->socket = newsock;
 	newsock->conn = NULL;
@@ -1080,6 +1092,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		return(0);
 
 	cli(); /* avoid the race. */
+	// sock是接收syn状态则阻塞当前进程
 	while(sk2->state == TCP_SYN_RECV) 
 	{
 		interruptible_sleep_on(sk2->sleep);
@@ -1094,7 +1107,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		}
 	}
 	sti();
-
+	
 	if (sk2->state != TCP_ESTABLISHED && sk2->err > 0) 
 	{
 		err = -sk2->err;
@@ -1104,6 +1117,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		newsock->data = NULL;
 		return(err);
 	}
+	// 设置sock为已经建立连接状态
 	newsock->state = SS_CONNECTED;
 	return(0);
 }

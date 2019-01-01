@@ -4224,9 +4224,10 @@ static struct sock *tcp_accept(struct sock *sk, int flags)
 	/* Avoid the race. */
 	cli();
 	sk->inuse = 1;
-
+	// 从sock的receive_queue队列摘取已建立连接的节点，
 	while((skb = tcp_dequeue_established(sk)) == NULL) 
-	{
+	{	
+		// 没有已经建立连接的节点，但是设置了非阻塞模式，直接返回
 		if (flags & O_NONBLOCK) 
 		{
 			sti();
@@ -4236,6 +4237,7 @@ static struct sock *tcp_accept(struct sock *sk, int flags)
 		}
 
 		release_sock(sk);
+		//阻塞进程，如果后续建立了连接，则进程被唤醒的时候，就会跳出while循环
 		interruptible_sleep_on(sk->sleep);
 		if (current->signal & ~current->blocked) 
 		{
@@ -4250,12 +4252,14 @@ static struct sock *tcp_accept(struct sock *sk, int flags)
 	/*
 	 *	Now all we need to do is return skb->sk. 
 	 */
-
+	// 拿到一个新的sock结构，由建立连接的时候创建的
 	newsk = skb->sk;
 
 	kfree_skb(skb, FREE_READ);
+	// 队列节点数减一
 	sk->ack_backlog--;
 	release_sock(sk);
+	// 返回新的sock结构体
 	return(newsk);
 }
 
