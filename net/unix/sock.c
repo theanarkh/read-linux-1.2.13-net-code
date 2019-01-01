@@ -315,12 +315,13 @@ static int unix_proto_create(struct socket *sock, int protocol)
 	{
 		return(-EINVAL);
 	}
-
+	// 分配一个unix_proto_data结构体
 	if (!(upd = unix_data_alloc())) 
 	{
 		printk("UNIX: create: can't allocate buffer\n");
 		return(-ENOMEM);
 	}
+	// 给unix_proto_data的buf字段分配一个页大小的内存
 	if (!(upd->buf = (char*) get_free_page(GFP_USER))) 
 	{
 		printk("UNIX: create: can't get page!\n");
@@ -328,8 +329,11 @@ static int unix_proto_create(struct socket *sock, int protocol)
 		return(-ENOMEM);
 	}
 	upd->protocol = protocol;
+	// 关联unix_proto_data对应的socket结构
 	upd->socket = sock;
+	// 关联socket对应的unix_proto_data结构
 	UN_DATA(sock) = upd;
+	// 标记unix_proto_data已被使用
 	upd->refcnt = 1;	/* Now it's complete - bgm */
 	return(0);
 }
@@ -407,21 +411,25 @@ static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 		return(-EINVAL);
 	}
 	memcpy(&upd->sockaddr_un, umyaddr, sockaddr_len);
+	/*
+		UN_PATH_OFFSET为sun_path在sockaddr_un结构中的偏移，
+		sockaddr_len-UN_PATH_OFFSET等于sun_path的最后一个字符+1的位置
+	*/
 	upd->sockaddr_un.sun_path[sockaddr_len-UN_PATH_OFFSET] = '\0';
 	if (upd->sockaddr_un.sun_family != AF_UNIX) 
 	{
 		return(-EINVAL);
 	}
-
+	// 把sun_path的值放到fname中
 	memcpy(fname, upd->sockaddr_un.sun_path, sockaddr_len-UN_PATH_OFFSET);
 	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
 	old_fs = get_fs();
 	set_fs(get_ds());
-
+	// 新建一个inode节点，文件名是fname，标记是一个socket类型
 	i = do_mknod(fname, S_IFSOCK | S_IRWXUGO, 0);
 
 	if (i == 0) 
-		i = open_namei(fname, 0, S_IFSOCK, &upd->inode, NULL);
+		i = open_namei(fname, 0, S_IFSOCK, &upd->inode, NULL); // &upd->inode保存打开文件对应的inode节点
 	set_fs(old_fs);
 	if (i < 0) 
 	{
@@ -557,14 +565,17 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
  * Great. Finish the connection relative to server and client,
  * wake up the client and return the new fd to the server.
  */
-
+	// 摘下sock的iconn队列中一个节点给newsock->conn
 	sock->iconn = clientsock->next;
 	clientsock->next = NULL;
 	newsock->conn = clientsock;
+	// 互相引用，设置状态为已连接
 	clientsock->conn = newsock;
 	clientsock->state = SS_CONNECTED;
 	newsock->state = SS_CONNECTED;
+	// unix_proto_data结构的引用数加1
 	unix_data_ref(UN_DATA(clientsock));
+	// 把unix_proto_data的数据复制到sock结构中
 	UN_DATA(newsock)->peerupd	     = UN_DATA(clientsock);
 	UN_DATA(newsock)->sockaddr_un        = UN_DATA(sock)->sockaddr_un;
 	UN_DATA(newsock)->sockaddr_len       = UN_DATA(sock)->sockaddr_len;
@@ -577,19 +588,20 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
 /*
  *	Gets the current name or the name of the connected socket. 
  */
- 
+// 获取socket绑定的地址
 static int unix_proto_getname(struct socket *sock, struct sockaddr *usockaddr,
 		   int *usockaddr_len, int peer)
 {
 	struct unix_proto_data *upd;
 	int len;
-
+	// 取本端还是对端的
 	if (peer) 
 	{
 		if (sock->state != SS_CONNECTED) 
 		{
 			return(-EINVAL);
 		}
+		// 获取对端的unix_proto_data结构
 		upd = UN_DATA(sock->conn);
 	}
 	else
@@ -615,16 +627,20 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
 		return(0);
 
 	upd = UN_DATA(sock);
+	// 看buf中有多少数据可读
 	while(!(avail = UN_BUF_AVAIL(upd))) 
 	{
 		if (sock->state != SS_CONNECTED) 
 		{
 			return((sock->state == SS_DISCONNECTING) ? 0 : -EINVAL);
 		}
+		// 没有数据，但是以非阻塞模式，直接返回
 		if (nonblock) 
 			return(-EAGAIN);
+		// 阻塞等待数据
 		sock->flags |= SO_WAITDATA;
 		interruptible_sleep_on(sock->wait);
+		// 唤醒后清除等待标记位
 		sock->flags &= ~SO_WAITDATA;
 		if (current->signal & ~current->blocked) 
 		{
@@ -636,7 +652,7 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
  *	Copy from the read buffer into the user's buffer,
  *	watching for wraparound. Then we wake up the writer.
  */
-   
+    // 加锁
 	unix_lock(upd);
 	do 
 	{
@@ -648,14 +664,18 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
 			send_sig(SIGKILL, current, 1);
 			return(-EPIPE);
 		}
-
+		// 要读的比可读的多，则要读的为可读的数量
 		if ((cando = todo) > avail) 
 			cando = avail;
+		// 有一部分数据在队尾，一部分在队头，则先读队尾的,bp_tail表示可写空间的最后一个字节加1，即可读的第一个字节
 		if (cando >(part = BUF_SIZE - upd->bp_tail)) 
 			cando = part;
 		memcpy_tofs(ubuf, upd->buf + upd->bp_tail, cando);
+		// 更新bp_tail，可写空间增加
 		upd->bp_tail =(upd->bp_tail + cando) &(BUF_SIZE-1);
+		// 更新用户的buf指针
 		ubuf += cando;
+		// 还需要读的字节数
 		todo -= cando;
 		if (sock->state == SS_CONNECTED)
 		{
@@ -664,9 +684,9 @@ static int unix_proto_read(struct socket *sock, char *ubuf, int size, int nonblo
 		}
 		avail = UN_BUF_AVAIL(upd);
 	} 
-	while(todo && avail);
+	while(todo && avail);// 还有数据并且还没读完则继续
 	unix_unlock(upd);
-	return(size - todo);
+	return(size - todo);// 要读的减去读了的
 }
 
 
@@ -692,8 +712,9 @@ static int unix_proto_write(struct socket *sock, char *ubuf, int size, int nonbl
 		}
 		return(-EINVAL);
 	}
+	// 获取对端的unix_proto_data字段
 	pupd = UN_DATA(sock)->peerupd;	/* safer than sock->conn */
-
+	// 还有多少空间可写
 	while(!(space = UN_BUF_SPACE(pupd))) 
 	{
 		sock->flags |= SO_NOSPACE;
@@ -741,16 +762,19 @@ static int unix_proto_write(struct socket *sock, char *ubuf, int size, int nonbl
 			unix_unlock(pupd);
 			return(-EPIPE);
 		}
-		
+		// 需要写的比能写的多
 		if ((cando = todo) > space) 
 			cando = space;
-
+		// 可写空间一部分在队头一部分在队尾，则先写队尾的，再写队头的
 		if (cando >(part = BUF_SIZE - pupd->bp_head))
 			cando = part;
 	
 		memcpy_fromfs(pupd->buf + pupd->bp_head, ubuf, cando);
+		// 更新可写地址，可写空间减少，处理回环情况
 		pupd->bp_head =(pupd->bp_head + cando) &(BUF_SIZE-1);
+		// 更新用户的buf指针
 		ubuf += cando;
+		// 还需要写多少个字
 		todo -= cando;
 		if (sock->state == SS_CONNECTED)
 		{

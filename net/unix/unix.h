@@ -36,7 +36,7 @@ struct unix_proto_data {
 	struct sockaddr_un	sockaddr_un;
 	short		sockaddr_len;	/* >0 if name bound		*/
 	char		*buf;
-	int		bp_head, bp_tail;
+	int		bp_head, bp_tail; // 可写空间的头尾指针
 	struct inode	*inode;
 	struct unix_proto_data	*peerupd;
 	struct wait_queue *wait;	/* Lock across page faults (FvK) */
