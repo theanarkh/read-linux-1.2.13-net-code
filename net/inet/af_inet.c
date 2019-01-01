@@ -442,7 +442,7 @@ static int inet_getsockopt(struct socket *sock, int level, int optname,
 /*
  *	Automatically bind an unbound socket.
  */
-
+// 绑定一个随机的端口，更新sk的源端口字段，并把sk挂载到端口对应的队列中
 static int inet_autobind(struct sock *sk)
 {
 	/* We may need to bind the socket. */
@@ -520,7 +520,7 @@ static void def_callback3(struct sock *sk)
  *	FIXME: Gcc would generate much better code if we set the parameters
  *	up in in-memory structure order. Gcc68K even more so
  */
-
+// 创建一个sock结构体，和socket结构体互相关联
 static int inet_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -556,7 +556,7 @@ static int inet_create(struct socket *sock, int protocol)
 			sk->no_check = UDP_NO_CHECK;
 			prot=&udp_prot;
 			break;
-      
+		// 下面两种类型需要root身份
 		case SOCK_RAW:
 			if (!suser()) 
 			{
@@ -600,6 +600,7 @@ static int inet_create(struct socket *sock, int protocol)
 			kfree_s((void *)sk, sizeof(*sk));
 			return(-ESOCKTNOSUPPORT);
 	}
+	// sock结构体的socket字段指向上层的socket结构体
 	sk->socket = sock;
 #ifdef CONFIG_TCP_NAGLE_OFF
 	sk->nonagle = 1;
@@ -661,6 +662,7 @@ static int inet_create(struct socket *sock, int protocol)
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->receive_queue);
 	sk->mtu = 576;
+	// 下层的操作函数集
 	sk->prot = prot;
 	sk->sleep = sock->wait;
 	sk->daddr = 0;
@@ -679,7 +681,9 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->timer.function = &net_timer;
 	skb_queue_head_init(&sk->back_log);
 	sk->blog = 0;
+	// socket结构体的data字段指向底层的sock结构体
 	sock->data =(void *) sk;
+	// 初始化tcp头
 	sk->dummy_th.doff = sizeof(sk->dummy_th)/4;
 	sk->dummy_th.res1=0;
 	sk->dummy_th.res2=0;
@@ -825,7 +829,7 @@ static int inet_release(struct socket *sock, struct socket *peer)
 /* this needs to be changed to disallow
    the rebinding of sockets.   What error
    should it return? */
-
+// 给socket绑定一个地址
 static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 	       int addr_len)
 {
@@ -877,6 +881,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		/* should be below! */
 			if (sk2->num != snum) 
 				continue;
+			// 没有设置可重用标记
 			if (!sk->reuse)
 			{
 				sti();
@@ -938,7 +943,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		/* Connection completing after a connect/EINPROGRESS/select/connect */
 		return 0;	/* Rock and roll */
 	}
-
+	// 正在连接，并且是非阻塞的，直接返回
 	if (sock->state == SS_CONNECTING && sk->protocol == IPPROTO_TCP && (flags & O_NONBLOCK)) {
 		if (sk->err != 0)
 		{
@@ -948,7 +953,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		}
 		return -EALREADY;	/* Connecting is currently in progress */
 	}
-  	
+	
 	if (sock->state != SS_CONNECTING) 
 	{
 		/* We may need to bind the socket. */
@@ -956,9 +961,11 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 			return(-EAGAIN);
 		if (sk->prot->connect == NULL) 
 			return(-EOPNOTSUPP);
+		// 调用底层的连接函数，发一个syn包
 		err = sk->prot->connect(sk, (struct sockaddr_in *)uaddr, addr_len);
 		if (err < 0) 
 			return(err);
+		// 发送成功设置状态为连接中
   		sock->state = SS_CONNECTING;
 	}
 	
@@ -971,11 +978,12 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		sti();
 		return -err;
 	}
-
+	// 还没建立连接成功并且是非阻塞的方式，直接返回
 	if (sk->state != TCP_ESTABLISHED &&(flags & O_NONBLOCK)) 
 	  	return(-EINPROGRESS);
 
 	cli(); /* avoid the race condition */
+	// 连接建立中，阻塞当前进程
 	while(sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) 
 	{
 		interruptible_sleep_on(sk->sleep);
@@ -986,6 +994,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		}
 		/* This fixes a nasty in the tcp/ip code. There is a hideous hassle with
 		   icmp error packets wanting to close a tcp or udp socket. */
+		// 连接失败
 		if(sk->err && sk->protocol == IPPROTO_TCP)
 		{
 			sti();
@@ -996,6 +1005,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 		}
 	}
 	sti();
+	// 连接建立
 	sock->state = SS_CONNECTED;
 
 	if (sk->state != TCP_ESTABLISHED && sk->err) 
@@ -1031,6 +1041,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	 * We need to free it up because the tcp module creates
 	 * its own when it accepts one.
 	 */
+	// 销毁新socket结构体中的socke结构体,d调用底层的accept会返回一个新的sock
 	if (newsock->data)
 	{
 	  	struct sock *sk=(struct sock *)newsock->data;
@@ -1049,7 +1060,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		sk1->pair = NULL;
 	} 
 	else
-	{
+	{	// 返回一个新的sock结构体
 		sk2 = sk1->prot->accept(sk1,flags);
 		if (sk2 == NULL) 
 		{
@@ -1060,6 +1071,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 			return(-err);
 		}
 	}
+	// 互相关联
 	newsock->data = (void *)sk2;
 	sk2->sleep = newsock->wait;
 	sk2->socket = newsock;

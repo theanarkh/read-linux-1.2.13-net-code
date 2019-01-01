@@ -121,7 +121,7 @@ inet_add_protocol(struct inet_protocol *prot)
   struct inet_protocol *p2;
 
   hash = prot->protocol & (MAX_INET_PROTOS - 1);
-  prot ->next = inet_protos[hash];
+  prot ->next = inet_protos[hash]; // 头插法插到inet_protos哈希链表
   inet_protos[hash] = prot;
   prot->copy = 0;
 

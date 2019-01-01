@@ -1432,7 +1432,11 @@ void dev_init(void)
 	 
 	dev2 = NULL;
 	for (dev = dev_base; dev != NULL; dev=dev->next) 
-	{
+	{	/*
+			dev2记录上一个执行init成功的节点，如果有init函数并且执行失败，
+			1 开始的一个或多个节点都失败，即dev2等于null,则dev_base执行后续节点，剔除失败的节点
+			2 在中间节点执行失败，则dev2记录上一个成功的节点，dev2->next执行执行失败节点的下一个节点
+		*/
 		if (dev->init && dev->init(dev)) 
 		{
 			/*

@@ -85,7 +85,7 @@ static int sock_fasync(struct inode *inode, struct file *filp, int on);
  *	Socket files have a set of 'special' operations as well as the generic file ones. These don't appear
  *	in the operation structures but are done directly via the socketcall() multiplexor.
  */
-
+// 操作网络层文件描述符的函数
 static struct file_operations socket_file_ops = {
 	sock_lseek,
 	sock_read,
@@ -164,11 +164,11 @@ static int get_fd(struct inode *inode)
 	/*
 	 *	Find a file descriptor suitable for return to the user. 
 	 */
-
+	// 获取一个可以的file结构体
 	file = get_empty_filp();
 	if (!file) 
 		return(-1);
-
+	// 挂载到进程的fd数组中
 	for (fd = 0; fd < NR_OPEN; ++fd)
 		if (!current->files->fd[fd]) 
 			break;
@@ -180,10 +180,12 @@ static int get_fd(struct inode *inode)
 
 	FD_CLR(fd, &current->files->close_on_exec);
 		current->files->fd[fd] = file;
+	// 设置文件操作函数集
 	file->f_op = &socket_file_ops;
 	file->f_mode = 3;
 	file->f_flags = O_RDWR;
 	file->f_count = 1;
+	// 关联inode节点
 	file->f_inode = inode;
 	if (inode) 
 		inode->i_count++;
@@ -198,6 +200,7 @@ static int get_fd(struct inode *inode)
  * The original socket implementation wasn't very clever, which is
  * why this exists at all..
  */
+// inode和socket互相引用
 inline struct socket *socki_lookup(struct inode *inode)
 {
 	return &inode->u.socket_i;
@@ -206,7 +209,7 @@ inline struct socket *socki_lookup(struct inode *inode)
 /*
  *	Go from a file number to its socket slot.
  */
-
+// 通过fd找到file结构体，从而找到inode节点，最后找到socket结构体
 static inline struct socket *sockfd_lookup(int fd, struct file **pfile)
 {
 	struct file *file;
@@ -233,16 +236,16 @@ struct socket *sock_alloc(void)
 {
 	struct inode * inode;
 	struct socket * sock;
-
+	// 获取一个可用的inode节点
 	inode = get_empty_inode();
 	if (!inode)
 		return NULL;
-
+	// 初始化某些字段
 	inode->i_mode = S_IFSOCK;
 	inode->i_sock = 1;// socket文件
 	inode->i_uid = current->uid;
 	inode->i_gid = current->gid;
-
+	// 执行inode的socket结构体，初始化inode结构体的socket结构体
 	sock = &inode->u.socket_i;
 	sock->state = SS_UNCONNECTED;
 	sock->flags = 0;
@@ -252,9 +255,12 @@ struct socket *sock_alloc(void)
 	sock->iconn = NULL;
 	sock->next = NULL;
 	sock->wait = &inode->i_wait;
+	// 互相引用
 	sock->inode = inode;		/* "backlink": we could use pointer arithmetic instead */
 	sock->fasync_list = NULL;
+	// socket数加一
 	sockets_in_use++;
+	// 返回新的socket结构体，他挂载在inode中
 	return sock;
 }
 
@@ -269,11 +275,12 @@ static inline void sock_release_peer(struct socket *peer)
 	sock_wake_async(peer, 1);
 }
 
+// 是否一个socket
 void sock_release(struct socket *sock)
 {
 	int oldstate;
 	struct socket *peersock, *nextsock;
-
+	// 设置状态为未连接
 	if ((oldstate = sock->state) != SS_UNCONNECTED)
 		sock->state = SS_DISCONNECTING;
 
@@ -594,7 +601,7 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
  *	Perform the socket system call. we locate the appropriate
  *	family, then create a fresh socket.
  */
-
+// 新建一个socket结构体，并且创建一个下层的sock结构体，互相关联
 static int sock_socket(int family, int type, int protocol)
 {
 	int i, fd;
@@ -632,14 +639,14 @@ static int sock_socket(int family, int type, int protocol)
  *	the protocol is 0, the family is instructed to select an appropriate
  *	default.
  */
-
+	// 分配一个新的socket结构体
 	if (!(sock = sock_alloc())) 
 	{
 		printk("NET: sock_socket: no more sockets\n");
 		return(-ENOSR);	/* Was: EAGAIN, but we are out of
 				   system resources! */
 	}
-
+	// 设置类型和操作函数集
 	sock->type = type;
 	sock->ops = ops;
 	if ((i = sock->ops->create(sock, protocol)) < 0) 
@@ -647,7 +654,7 @@ static int sock_socket(int family, int type, int protocol)
 		sock_release(sock);
 		return(i);
 	}
-
+	// 返回一个新的文件描述符
 	if ((fd = get_fd(SOCK_INODE(sock))) < 0) 
 	{
 		sock_release(sock);
@@ -660,7 +667,7 @@ static int sock_socket(int family, int type, int protocol)
 /*
  *	Create a pair of connected sockets.
  */
-
+// 新建两个socket用户进程间通信
 static int sock_socketpair(int family, int type, int protocol, unsigned long usockvec[2])
 {
 	int fd1, fd2, i;
@@ -772,6 +779,7 @@ static int sock_listen(int fd, int backlog)
 
 	if (sock->ops && sock->ops->listen)
 		sock->ops->listen(sock, backlog);
+	// 设置监听标记位
 	sock->flags |= SO_ACCEPTCON;
 	return(0);
 }
@@ -795,17 +803,19 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 
 	if (fd < 0 || fd >= NR_OPEN || ((file = current->files->fd[fd]) == NULL))
 		return(-EBADF);
+	// 根据文件描述符找到对应的file结构体和socket结构
   	if (!(sock = sockfd_lookup(fd, &file))) 
 		return(-ENOTSOCK);
 	if (sock->state != SS_UNCONNECTED) 
 	{
 		return(-EINVAL);
 	}
+	// socket没有调用过listen，报错
 	if (!(sock->flags & SO_ACCEPTCON)) 
 	{
 		return(-EINVAL);
 	}
-
+	// 分配一个新的socket结构体
 	if (!(newsock = sock_alloc())) 
 	{
 		printk("NET: sock_accept: no more sockets\n");
@@ -814,6 +824,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 	}
 	newsock->type = sock->type;
 	newsock->ops = sock->ops;
+	// 创建一个底层的sock结构体和socket结构体互相关联
 	if ((i = sock->ops->dup(newsock, sock)) < 0) 
 	{
 		sock_release(newsock);
@@ -826,13 +837,13 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 		sock_release(newsock);
 		return(i);
 	}
-
+	// 返回一个新的文件描述符
 	if ((fd = get_fd(SOCK_INODE(newsock))) < 0) 
 	{
 		sock_release(newsock);
 		return(-EINVAL);
 	}
-
+	// 是否需要获取socket对应的地址
 	if (upeer_sockaddr)
 	{
 		newsock->ops->getname(newsock, (struct sockaddr *)address, &len, 1);
@@ -1129,7 +1140,7 @@ static int sock_shutdown(int fd, int how)
 /*
  *	Perform a file control on a socket file descriptor.
  */
-
+// 修改socket的属性
 int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct socket *sock;
@@ -1150,7 +1161,7 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
  *	kernel/user space manipulations and global assumptions from the protocol
  *	layers proper - AC.
  */
-
+// 传输层网络函数的统一入口
 asmlinkage int sys_socketcall(int call, unsigned long *args)
 {
 	int er;
@@ -1282,16 +1293,17 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
  *	advertise its address family, and have it linked into the
  *	SOCKET module.
  */
- 
+// 注释协议簇对应的操作函数集,在pops数组变量中保存 
 int sock_register(int family, struct proto_ops *ops)
 {
 	int i;
 
 	cli();
 	for(i = 0; i < NPROTO; i++) 
-	{
+	{	// 找到一个空的slot
 		if (pops[i] != NULL) 
 			continue;
+		// 注册
 		pops[i] = ops;
 		pops[i]->family = family;
 		sti();
@@ -1306,7 +1318,7 @@ int sock_register(int family, struct proto_ops *ops)
  *	remove its address family, and have it unlinked from the
  *	SOCKET module.
  */
- 
+// 注销协议簇
 int sock_unregister(int family)
 {
 	int i;
@@ -1328,12 +1340,13 @@ int sock_unregister(int family)
 }
 
 void proto_init(void)
-{
+{	// 该变量在protocols.c中定义
 	extern struct net_proto protocols[];	/* Network protocols */
 	struct net_proto *pro;
 
 	/* Kick all configured protocols. */
 	pro = protocols;
+	// 执行每个协议的初始化函数，每个协议的初始化函数执行的操作是把协议本身的信息注册到pops数组，见sock_register函数
 	while (pro->name != NULL) 
 	{
 		(*pro->init_func)(pro);
@@ -1342,7 +1355,7 @@ void proto_init(void)
 	/* We're all done... */
 }
 
-
+// 操作系统初始化时，在main函数里执行该函数
 void sock_init(void)
 {
 	int i;
@@ -1352,7 +1365,7 @@ void sock_init(void)
 	/*
 	 *	Initialize all address (protocol) families. 
 	 */
-	 
+	// 清空props数组 
 	for (i = 0; i < NPROTO; ++i) pops[i] = NULL;
 
 	/*
@@ -1365,7 +1378,7 @@ void sock_init(void)
 	/* 
 	 *	Initialize the DEV module. 
 	 */
-
+	// 初始化链路层设备
 	dev_init();
   
 	/*

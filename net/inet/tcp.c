@@ -332,7 +332,7 @@ int tcp_select_window(struct sock *sk)
  *	Find someone to 'accept'. Must be called with
  *	sk->inuse=1 or cli()
  */ 
-
+// 找出已经完成三次握手的socke
 static struct sk_buff *tcp_find_established(struct sock *s)
 {
 	struct sk_buff *p=skb_peek(&s->receive_queue);
@@ -4541,7 +4541,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  	kfree_skb(skb,FREE_READ);
 	  	return(0);
 	}
-  
+	// tcp头
 	th = skb->h.th;
 
 	/*
@@ -4577,6 +4577,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		th->seq = ntohl(th->seq);
 
 		/* See if we know about the socket. */
+		// 找不到sock说明这个数据包无效，发送重置包
 		if (sk == NULL) 
 		{
 			/*
