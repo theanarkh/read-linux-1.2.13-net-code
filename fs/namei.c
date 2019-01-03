@@ -445,6 +445,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	struct inode * dir;
 
 	mode &= ~current->fs->umask;
+	// 根据文件路径找到目录那文件名，分别存在basename和dir中，namelen为basename的长度
 	error = dir_namei(filename,&namelen,&basename, NULL, &dir);
 	if (error)
 		return error;
@@ -466,6 +467,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	}
 	dir->i_count++;
 	down(&dir->i_sem);
+	// 新建一个文件
 	error = dir->i_op->mknod(dir,basename,namelen,mode,dev);
 	up(&dir->i_sem);
 	iput(dir);

@@ -235,7 +235,7 @@ unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len,
  *	It doesn't help this problem that the Linux scheduler is desperately in need of a major 
  *	rewrite. Somewhere near 16K would be better maybe 32.
  */
-
+// 分配一个没有被使用的unix_proto_data结构
 static struct unix_proto_data *
 unix_data_alloc(void)
 {
@@ -243,9 +243,9 @@ unix_data_alloc(void)
 
 	cli();
 	for(upd = unix_datas; upd <= last_unix_data; ++upd) 
-	{
+	{	// 没有被使用
 		if (!upd->refcnt) 
-		{
+		{	// 初始化数据
 			upd->refcnt = -1;	/* unix domain socket not yet initialised - bgm */
 			sti();
 			upd->socket = NULL;
@@ -285,6 +285,7 @@ static void unix_data_deref(struct unix_proto_data *upd)
 	{
 		return;
 	}
+	//引用数为1说明没人使用了，则释放该结构对应的内存
 	if (upd->refcnt == 1) 
 	{
 		if (upd->buf) 
@@ -341,7 +342,10 @@ static int unix_proto_create(struct socket *sock, int protocol)
 /*
  *	Duplicate a socket.
  */
-
+/* 
+	创建一个新的unix_proto_data结构和socket关联,newsock由上层新创建的，即首先创建了一个新的socket结构，
+	根据oldsock的协议类型，创建了一个新的unix_proto_data和newsock关联
+*/
 static int unix_proto_dup(struct socket *newsock, struct socket *oldsock)
 {
 	struct unix_proto_data *upd = UN_DATA(oldsock);
@@ -359,7 +363,7 @@ static int unix_proto_release(struct socket *sock, struct socket *peer)
 
 	if (!upd) 
 		return(0);
-
+	// 重置unix_proto_data结构他数据，引用计数减一，有对端的话把对端的unix_proto_data计数也减一，因为不再引用他
 	if (upd->socket != sock) 
 	{
 		printk("UNIX: release: socket link mismatch!\n");
@@ -391,7 +395,7 @@ static int unix_proto_release(struct socket *sock, struct socket *peer)
  *	  Here we return EINVAL, but it may be necessary to re-bind.
  *	  I think thats what BSD does in the case of datagram sockets...
  */
- 
+// 把sockaddr的内容存在unix_proto_data中，并创建一个文件
 static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 		int sockaddr_len)
 {
@@ -410,6 +414,7 @@ static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 		/*printk("UNIX: bind: already bound!\n");*/
 		return(-EINVAL);
 	}
+	// sockaddr_un兼容sockaddr结构
 	memcpy(&upd->sockaddr_un, umyaddr, sockaddr_len);
 	/*
 		UN_PATH_OFFSET为sun_path在sockaddr_un结构中的偏移，
@@ -449,7 +454,7 @@ static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
  *	(I can't for the life of me find an application where that
  *	wouldn't be the case!)
  */
-
+// 根据uservaddr传入的信息从找到一个unix_proto_data结构，即服务器
 static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 		   int sockaddr_len, int flags)
 {
@@ -489,15 +494,17 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
 	old_fs = get_fs();
 	set_fs(get_ds());
+	// 根据传入的路径打开该文件，把inode存在inode变量里
 	i = open_namei(fname, 2, S_IFSOCK, &inode, NULL);
 	set_fs(old_fs);
 	if (i < 0) 
 	{
 		return(i);
 	}
-	  
+	// 从unix_proto_data表中找到对应的unix_proto_data结构  
 	serv_upd = unix_data_lookup(&sockun, sockaddr_len, inode);
 	iput(inode);
+	// 没有则说明服务端不存在
 	if (!serv_upd) 
 	{
 		return(-EINVAL);
@@ -507,9 +514,9 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	{
 		return(i);
 	}
-
+	// conn为服务端socket
 	if (sock->conn) 
-	{
+	{	// 服务端unix_proto_data结构引用数加一，并指向服务端unix_proto_data结构
 		unix_data_ref(UN_DATA(sock->conn));
 		UN_DATA(sock)->peerupd = UN_DATA(sock->conn); /* ref server */
 	}
@@ -523,7 +530,7 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
  *	for a wait area, and deadlock prevention in the case of a process
  *	writing to itself is, ignored, in true unix fashion!
  */
- 
+// 新建两个socket，互相指向对端的unix_proto_data结构，返回两个文件描述符 
 static int unix_proto_socketpair(struct socket *sock1, struct socket *sock2)
 {
 	struct unix_proto_data *upd1 = UN_DATA(sock1), *upd2 = UN_DATA(sock2);
@@ -548,13 +555,17 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
  * If there aren't any sockets awaiting connection,
  * then wait for one, unless nonblocking.
  */
-
+	// 拿到客户端连接队列
 	while(!(clientsock = sock->iconn)) 
-	{
+	{	
+		// 为空并且设置了非阻塞直接返回
 		if (flags & O_NONBLOCK) 
 			return(-EAGAIN);
+		// 设置等待连接标记
 		sock->flags |= SO_WAITDATA;
+		// 阻塞
 		interruptible_sleep_on(sock->wait);
+		// 清除等待连接标记
 		sock->flags &= ~SO_WAITDATA;
 		if (current->signal & ~current->blocked) 
 		{
@@ -565,9 +576,10 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
  * Great. Finish the connection relative to server and client,
  * wake up the client and return the new fd to the server.
  */
-	// 摘下sock的iconn队列中一个节点给newsock->conn
+	// 更新服务端的连接队列，摘下了第一个节点
 	sock->iconn = clientsock->next;
 	clientsock->next = NULL;
+	// 新生成的socket结构，对端指向客户端
 	newsock->conn = clientsock;
 	// 互相引用，设置状态为已连接
 	clientsock->conn = newsock;
@@ -575,10 +587,11 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
 	newsock->state = SS_CONNECTED;
 	// unix_proto_data结构的引用数加1
 	unix_data_ref(UN_DATA(clientsock));
-	// 把unix_proto_data的数据复制到sock结构中
+	// 把unix_proto_data的数据复制到sock结构中，保存客户端的路径信息
 	UN_DATA(newsock)->peerupd	     = UN_DATA(clientsock);
 	UN_DATA(newsock)->sockaddr_un        = UN_DATA(sock)->sockaddr_un;
 	UN_DATA(newsock)->sockaddr_len       = UN_DATA(sock)->sockaddr_len;
+	// 唤醒被阻塞的客户端队列
 	wake_up_interruptible(clientsock->wait);
 	sock_wake_async(clientsock, 0);
 	return(0);

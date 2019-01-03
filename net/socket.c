@@ -523,7 +523,7 @@ int sock_wake_async(struct socket *sock, int how)
 /*
  *	Wait for a connection.
  */
-
+// 把客户端socket追加到服务端的队列结尾，设置客户端的的对端是服务端的socket，唤醒服务端处理请求，当前进程阻塞，等待唤醒
 int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 {
 	struct socket *last;
@@ -531,6 +531,7 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 	/*
 	 *	We must be listening
 	 */
+	// 调用listen的时候设置的
 	if (!(servsock->flags & SO_ACCEPTCON)) 
 	{
 		return(-EINVAL);
@@ -542,15 +543,17 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
   	 
 	mysock->next = NULL;
 	cli();
+	// 把客服端socket加到服务端的连接队列
 	if (!(last = servsock->iconn)) 
-		servsock->iconn = mysock;
+		servsock->iconn = mysock; // 队列为空
 	else 
-	{
+	{	// 追加到队尾
 		while (last->next) 
 			last = last->next;
 		last->next = mysock;
 	}
 	mysock->state = SS_CONNECTING;
+	// 设置客户端的对端
 	mysock->conn = servsock;
 	sti();
 
@@ -558,14 +561,16 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 	 * Wake up server, then await connection. server will set state to
 	 * SS_CONNECTED if we're connected.
 	 */
+	// 有连接到来，唤醒服务端
 	wake_up_interruptible(servsock->wait);
 	sock_wake_async(servsock, 0);
 
 	if (mysock->state != SS_CONNECTED) 
-	{
+	{	
+		// 此时state为SS_CONNECTING，非阻塞则直接返回
 		if (flags & O_NONBLOCK)
 			return -EINPROGRESS;
-
+		// 否则阻塞当前发起连接的进程，等待服务端处理连接，设置state为SS_CONNECTED，然后唤醒客户端
 		interruptible_sleep_on(mysock->wait);
 		if (mysock->state != SS_CONNECTED &&
 		    mysock->state != SS_DISCONNECTING) 
@@ -580,10 +585,11 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 			if (mysock->conn == servsock) 
 			{
 				cli();
+				// 服务端连接队列只有一个节点
 				if ((last = servsock->iconn) == mysock)
 					servsock->iconn = mysock->next;
 				else 
-				{
+				{	// 找到mysock的前一个节点，删除mysock
 					while (last->next != mysock) 
 						last = last->next;
 					last->next = mysock->next;
@@ -810,7 +816,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 	{
 		return(-EINVAL);
 	}
-	// socket没有调用过listen，报错
+	// socket没有调用过listen，报错，该标记位在listen中设置
 	if (!(sock->flags & SO_ACCEPTCON)) 
 	{
 		return(-EINVAL);
@@ -830,7 +836,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 		sock_release(newsock);
 		return(i);
 	}
-
+	// accept返回一个新的sock和socket关联
 	i = newsock->ops->accept(sock, newsock, file->f_flags);
 	if ( i < 0) 
 	{
