@@ -523,7 +523,7 @@ int sock_wake_async(struct socket *sock, int how)
 /*
  *	Wait for a connection.
  */
-// 把客户端socket追加到服务端的队列结尾，设置客户端的的对端是服务端的socket，唤醒服务端处理请求，当前进程阻塞，等待唤醒
+// 把客户端socket追加到服务端的队列结尾，设置客户端的的对端是服务端的socket，唤醒服务端处理请求，当前进程阻塞，等待唤醒	
 int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 {
 	struct socket *last;
@@ -544,10 +544,10 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 	mysock->next = NULL;
 	cli();
 	// 把客服端socket加到服务端的连接队列
-	if (!(last = servsock->iconn)) 
-		servsock->iconn = mysock; // 队列为空
+	if (!(last = servsock->iconn)) // 队列为空，则当前客户端为第一个连接节点 
+		servsock->iconn = mysock; 
 	else 
-	{	// 追加到队尾
+	{	// 找到队尾，然后追加到队尾
 		while (last->next) 
 			last = last->next;
 		last->next = mysock;
@@ -564,7 +564,7 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 	// 有连接到来，唤醒服务端
 	wake_up_interruptible(servsock->wait);
 	sock_wake_async(servsock, 0);
-
+	
 	if (mysock->state != SS_CONNECTED) 
 	{	
 		// 此时state为SS_CONNECTING，非阻塞则直接返回
@@ -572,6 +572,7 @@ int sock_awaitconn(struct socket *mysock, struct socket *servsock, int flags)
 			return -EINPROGRESS;
 		// 否则阻塞当前发起连接的进程，等待服务端处理连接，设置state为SS_CONNECTED，然后唤醒客户端
 		interruptible_sleep_on(mysock->wait);
+		// 状态不对，删除该客户端
 		if (mysock->state != SS_CONNECTED &&
 		    mysock->state != SS_DISCONNECTING) 
 		{

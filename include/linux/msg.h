@@ -16,7 +16,9 @@ struct msqid_ds {
     time_t msg_ctime;       /* last change time */
     struct wait_queue *wwait;
     struct wait_queue *rwait;
+    // 一个消息队列中，当前数据的字节大小
     ushort msg_cbytes;      /* current number of bytes on queue */
+    // 一个消息队列的节点数限制
     ushort msg_qnum;        /* number of messages in queue */
     ushort msg_qbytes;      /* max number of bytes on queue */
     ushort msg_lspid;       /* pid of last msgsnd */

@@ -65,6 +65,7 @@ static int minix_match(int len, const char * name,
  * itself (as a parameter - res_dir). It does NOT read the inode of the
  * entry - you'll have to do that yourself if you want to.
  */
+// 根据指定目录返回该目录下文件名为name的entry结构
 static struct buffer_head * minix_find_entry(struct inode * dir,
 	const char * name, int namelen, struct minix_dir_entry ** res_dir)
 {

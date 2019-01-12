@@ -332,7 +332,7 @@ static int unix_proto_create(struct socket *sock, int protocol)
 	upd->protocol = protocol;
 	// 关联unix_proto_data对应的socket结构
 	upd->socket = sock;
-	// 关联socket对应的unix_proto_data结构
+	// socket的data字段指向unix_proto_data结构
 	UN_DATA(sock) = upd;
 	// 标记unix_proto_data已被使用
 	upd->refcnt = 1;	/* Now it's complete - bgm */
@@ -555,7 +555,7 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
  * If there aren't any sockets awaiting connection,
  * then wait for one, unless nonblocking.
  */
-	// 拿到客户端连接队列
+	// sock为服务端socket，iconn是连接队列，先判断是否有连接
 	while(!(clientsock = sock->iconn)) 
 	{	
 		// 为空并且设置了非阻塞直接返回
@@ -563,7 +563,7 @@ static int unix_proto_accept(struct socket *sock, struct socket *newsock, int fl
 			return(-EAGAIN);
 		// 设置等待连接标记
 		sock->flags |= SO_WAITDATA;
-		// 阻塞
+		// 阻塞，有有人connect的时候被唤醒
 		interruptible_sleep_on(sock->wait);
 		// 清除等待连接标记
 		sock->flags &= ~SO_WAITDATA;

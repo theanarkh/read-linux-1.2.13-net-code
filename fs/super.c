@@ -48,11 +48,13 @@ int register_filesystem(struct file_system_type * fs)
 	if (fs->next)
 		return -EBUSY;
 	tmp = &file_systems;
+	// 遍历链表，直到尾部
 	while (*tmp) {
 		if (strcmp((*tmp)->name, fs->name) == 0)
 			return -EBUSY;
 		tmp = &(*tmp)->next;
 	}
+	// 利用二级指针指针修改next域的内容，不需要使用->next = fs的形式
 	*tmp = fs;
 	return 0;
 }
@@ -167,7 +169,7 @@ int get_filesystem_list(char * buf)
 	}
 	return len;
 }
-
+// 通过文件系统名字获取文件系统的配置
 struct file_system_type *get_fs_type(char *name)
 {
 	struct file_system_type * fs = file_systems;
@@ -643,7 +645,7 @@ void mount_root(void)
 	struct inode * inode, d_inode;
 	struct file filp;
 	int retval;
-
+	// 清空超级块数组
 	memset(super_blocks, 0, sizeof(super_blocks));
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {

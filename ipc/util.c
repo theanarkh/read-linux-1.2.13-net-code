@@ -48,7 +48,7 @@ void ipc_init (void)
 int ipcperms (struct ipc_perm *ipcp, short flag)
 {	/* flag will most probably be 0 or S_...UGO from <linux/stat.h> */
 	int requested_mode, granted_mode;
-
+	// 超级用户直接返回有权限
 	if (suser())
 		return 0;
 	requested_mode = (flag >> 6) | (flag >> 3) | flag;
