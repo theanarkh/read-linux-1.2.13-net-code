@@ -4,16 +4,22 @@
 
 struct shmid_ds {
 	struct ipc_perm shm_perm;	/* operation perms */
+	// 共享内存的大小
 	int	shm_segsz;		/* size of segment (bytes) */
 	time_t	shm_atime;		/* last attach time */
 	time_t	shm_dtime;		/* last detach time */
 	time_t	shm_ctime;		/* last change time */
+	// 创建该结构体的进程
 	unsigned short	shm_cpid;	/* pid of creator */
 	unsigned short	shm_lpid;	/* pid of last operator */
+	// 当前使用该共享内存的进程数
 	short	shm_nattch;		/* no. of current attaches */
 	/* the following are private */
+	// 共享内存的页数
 	unsigned short   shm_npages;	/* size of segment (pages) */
+	// 指向共享的物理内存的指针
 	unsigned long   *shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
+	// 使用该共享内存的进程信息
 	struct vm_area_struct *attaches; /* descriptors for attaches */
 };
 

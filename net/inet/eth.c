@@ -100,7 +100,7 @@ int eth_header(unsigned char *buff, struct device *dev, unsigned short type,
 	/*
 	 *	Set the source hardware address. 
 	 */
-	 
+	// 传了源ip则直接复制，否则使用设备的ip作为源地址
 	if(saddr)
 		memcpy(eth->h_source,saddr,dev->addr_len);
 	else
@@ -115,7 +115,7 @@ int eth_header(unsigned char *buff, struct device *dev, unsigned short type,
 		memset(eth->h_dest, 0, dev->addr_len);
 		return(dev->hard_header_len);
 	}
-	
+	// 传了目的ip则直接复制，否则等待后面再初始化	
 	if(daddr)
 	{
 		memcpy(eth->h_dest,daddr,dev->addr_len);

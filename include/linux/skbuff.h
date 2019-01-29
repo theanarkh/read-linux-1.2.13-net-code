@@ -147,7 +147,7 @@ extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 /*
  *	Insert an sk_buff at the start of a list.
  */
-
+// 头插法插入双向循环链表
 extern __inline__ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -165,7 +165,7 @@ extern __inline__ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff 
 /*
  *	Insert an sk_buff at the end of a list.
  */
-
+// 位插法插入双向循环链表
 extern __inline__ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -196,16 +196,18 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 
 	save_flags(flags);
 	cli();
-
+	// 指向第一个节点
 	result = list->next;
+	// 没有节点
 	if (result == list) {
 		restore_flags(flags);
 		return NULL;
 	}
-
+	// 第一个节点的下一个节点前向指针执行链表头指针
 	result->next->prev = list;
+	// 链表头指针指向当前第一个节点的下一个节点
 	list->next = result->next;
-
+	// result被分离出链表
 	result->next = NULL;
 	result->prev = NULL;
 
@@ -217,7 +219,7 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 /*
  *	Insert a packet before another one in a list.
  */
-
+// 把newsk插入到old的前面
 extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -235,7 +237,7 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 /*
  *	Place a packet after a given packet in a list.
  */
-
+// 在old后面插入newsk
 extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
@@ -257,7 +259,7 @@ extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
  *	MUST EXIST when you unlink. Thus a list must have its contents unlinked
  *	_FIRST_.
  */
-
+// 把skb移出链表
 extern __inline__ void skb_unlink(struct sk_buff *skb)
 {
 	unsigned long flags;

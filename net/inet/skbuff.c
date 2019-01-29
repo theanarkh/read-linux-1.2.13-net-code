@@ -494,19 +494,20 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
 	unsigned long offset;
-
+	// sk_buff的总大小减去sk_buff的结构体的大小
 	n=alloc_skb(skb->mem_len-sizeof(struct sk_buff),priority);
 	if(n==NULL)
 		return NULL;
 
 	offset=((char *)n)-((char *)skb);
-
+	// 把data部分复制过来
 	memcpy(n->data,skb->data,skb->mem_len-sizeof(struct sk_buff));
 	n->len=skb->len;
 	n->link3=NULL;
 	n->sk=NULL;
 	n->when=skb->when;
 	n->dev=skb->dev;
+	// 指向原sk_buff的部分
 	n->h.raw=skb->h.raw+offset;
 	n->ip_hdr=(struct iphdr *)(((char *)skb->ip_hdr)+offset);
 	n->fraglen=skb->fraglen;

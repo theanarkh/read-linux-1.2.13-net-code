@@ -316,7 +316,7 @@ int sock_getsockopt(struct sock *sk, int level, int optname,
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
 	if (sk) 
-	{
+	{	// 已经分配的大小加上还需要分配的大小是否小于缓冲区大小，大于缓冲区不分配，除非设置了force标记
 		if (sk->wmem_alloc + size < sk->sndbuf || force) 
 		{
 			struct sk_buff * c = alloc_skb(size, priority);
@@ -339,7 +339,7 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
 	if (sk) 
-	{
+	{	// 如果分配的内容小于接收缓冲区大小，则分配一个sk_buff读取数据，
 		if (sk->rmem_alloc + size < sk->rcvbuf || force) 
 		{
 			struct sk_buff *c = alloc_skb(size, priority);

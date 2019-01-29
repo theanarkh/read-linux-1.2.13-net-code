@@ -193,12 +193,13 @@ build_options(struct iphdr *iph, struct options *opt)
 /*
  *	Take an skb, and fill in the MAC header.
  */
-// 构造ip头，如果失败则到链路层发送的时候再重新构造
+// 构造mac头，如果失败则到链路层发送的时候再重新构造
 static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct device *dev, unsigned long saddr)
 {
 	int mac = 0;
 
 	skb->dev = dev;
+	// arp解析完成标记
 	skb->arp = 1;
 	if (dev->hard_header)
 	{
@@ -206,11 +207,14 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 		 *	Build a hardware header. Source address is our mac, destination unknown
 		 *  	(rebuild header will sort this out)
 		 */
+		// 通过返回值的大小判断是否完成了arp解析
 		mac = dev->hard_header(skb->data, dev, ETH_P_IP, NULL, NULL, len, skb);
+		// 没有完成arp解析，置arp为0，等待后续解析
 		if (mac < 0)
 		{
 			mac = -mac;
 			skb->arp = 0;
+			// 没有完成arp解析先把下一跳地址设置为目的ip
 			skb->raddr = daddr;	/* next routing address */
 		}
 	}
@@ -247,6 +251,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	if(MULTICAST(daddr) && *dev==NULL && skb->sk && *skb->sk->ip_mc_name)
 		*dev=dev_get(skb->sk->ip_mc_name);
 #endif
+	// 没有dev则随便找一个能到目的ip的设备和下一跳路由
 	if (*dev == NULL)
 	{
 		if(skb->localroute)
@@ -258,7 +263,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 			ip_statistics.IpOutNoRoutes++;
 			return(-ENETUNREACH);
 		}
-
+		// 设置出口设备
 		*dev = rt->rt_dev;
 		/*
 		 *	If the frame is from us and going off machine it MUST MUST MUST
@@ -266,6 +271,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 		 */
 		if (LOOPBACK(saddr) && !LOOPBACK(daddr))
 			saddr = src;/*rt->rt_dev->pa_addr;*/
+		// 设置下一跳地址
 		raddr = rt->rt_gateway;
 
 		opt = &optmem;
@@ -292,21 +298,25 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	/*
 	 *	No source addr so make it our addr
 	 */
+	// 没有源ip则取出口设备的ip
 	if (saddr == 0)
 		saddr = src;
 
 	/*
 	 *	No gateway so aim at the real destination
 	 */
+	// 没有下一跳地址则设置下一跳地址为目的ip
 	if (raddr == 0)
 		raddr = daddr;
 
 	/*
 	 *	Now build the MAC header.
 	 */
-
+	// 构建mac头,返回mac头的大小
 	tmp = ip_send(skb, raddr, len, *dev, saddr);
+	// 更新可写地址
 	buff += tmp;
+	// 更新可写字节大小
 	len -= tmp;
 
 	/*
@@ -326,26 +336,31 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	 *	If we are using IPPROTO_RAW, then we don't need an IP header, since
 	 *	one is being supplied to us by the user
 	 */
-
+	// raw协议，构建mac头即可，剩下的由应用层完成
 	if(type == IPPROTO_RAW)
 		return (tmp);
-
+	// 开始构建ip头
 	iph = (struct iphdr *)buff;
 	iph->version  = 4;
 	iph->tos      = tos;
+	// 分片和偏移
 	iph->frag_off = 0;
+	// 跳数
 	iph->ttl      = ttl;
 	iph->daddr    = daddr;
 	iph->saddr    = saddr;
+	// 上层协议，如tcp
 	iph->protocol = type;
+	// 5个单位，即20字节
 	iph->ihl      = 5;
+	// skb的ip头字段直接他data字段里的位置
 	skb->ip_hdr   = iph;
 
 	/* Setup the IP options. */
 #ifdef Not_Yet_Avail
 	build_options(iph, opt);
 #endif
-
+	// 还不支持选项，20位ip头长度，tmp为mac头长度
 	return(20 + tmp);	/* IP header plus MAC header size */
 }
 
@@ -606,10 +621,10 @@ static struct ipq *ip_find(struct iphdr *iph)
 	cli();
 	qplast = NULL;
 	for(qp = ipqueue; qp != NULL; qplast = qp, qp = qp->next)
-	{
+	{	// 对比ip头里的几个字段
 		if (iph->id== qp->iph->id && iph->saddr == qp->iph->saddr &&
 			iph->daddr == qp->iph->daddr && iph->protocol == qp->iph->protocol)
-		{	// 找到后删除定时器不应该在这里处理？
+		{	// 找到后重置计时器，在这删除，在ip_find外面新增一个计时
 			del_timer(&qp->timer);	/* So it doesn't vanish on us. The timer will be reset anyway */
 			sti();
 			return(qp);
@@ -1557,7 +1572,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	3.	Checksums correctly. [Speed optimisation for later, skip loopback checksums]
 	 *	(4.	We ought to check for IP multicast addresses and undefined types.. does this matter ?)
 	 */
-
+	// 参数检查
 	if (skb->len<sizeof(struct iphdr) || iph->ihl<5 || iph->version != 4 ||
 		skb->len<ntohs(iph->tot_len) || ip_fast_csum((unsigned char *)iph, iph->ihl) !=0)
 	{
@@ -1569,7 +1584,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 *	See if the firewall wants to dispose of the packet. 
 	 */
-
+// 配置了防火墙，则先检查是否符合防火墙的过滤规则，否则则丢掉
 #ifdef	CONFIG_IP_FIREWALL
 	
 	if ((err=ip_fw_chk(iph,dev,ip_fw_blk_chain,ip_fw_blk_policy, 0))!=1)
@@ -1593,7 +1608,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	Next analyse the packet for options. Studies show under one packet in
 	 *	a thousand have options....
 	 */
-
+	// ip头超过20字节，说明有选项
 	if (iph->ihl != 5)
 	{  	/* Fast path for the typical optionless IP packet. */
 		memset((char *) &opt, 0, sizeof(opt));
@@ -1605,15 +1620,16 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 *	Remember if the frame is fragmented.
 	 */
-	 
+	
 	if(iph->frag_off)
-	{
+	{	
+		
 		if (iph->frag_off & 0x0020)
 			is_frag|=1;
 		/*
 		 *	Last fragment ?
 		 */
-	
+		
 		if (ntohs(iph->frag_off) & 0x1fff)
 			is_frag|=2;
 	}
@@ -1873,6 +1889,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 
 
 	skb->dev = dev;
+	// 发送时间
 	skb->when = jiffies;
 
 	/*
@@ -1887,6 +1904,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	ptr += dev->hard_header_len;
 	iph = (struct iphdr *)ptr;
 	skb->ip_hdr = iph;
+	// 整个ip头和数据的长度
 	iph->tot_len = ntohs(skb->len-dev->hard_header_len);
 
 #ifdef CONFIG_IP_FIREWALL
@@ -1898,7 +1916,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	/*
 	 *	No reassigning numbers to fragments...
 	 */
-
+	// 用于重组分片的id
 	if(free!=2)
 		iph->id      = htons(ip_id_count++);
 	else
@@ -1915,7 +1933,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	We need to somehow lock the original buffer and use
 	 *	bits of it.
 	 */
-
+	// 数据包大小mtu则分片处理
 	if(skb->len > dev->mtu + dev->hard_header_len)
 	{
 		ip_fragment(sk,skb,dev,0);
@@ -2041,7 +2059,8 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 		 */
 
 		if (sk != NULL)
-		{
+		{	
+			// 调用mac层发送
 			dev_queue_xmit(skb, dev, sk->priority);
 		}
 		else

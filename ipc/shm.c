@@ -25,21 +25,23 @@ static void killseg (int id);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
 static pte_t shm_swap_in(struct vm_area_struct *, unsigned long, unsigned long);
-
+// 共享内存的页数上限
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
 static int shm_swp = 0; /* number of shared memory pages that are in swap */
+// shmid_ds数组当前最大索引值
 static int max_shmid = 0; /* every used id is <= max_shmid */
 static struct wait_queue *shm_lock = NULL; /* calling findkey() may need to wait */
+// 管理共享内存的结构体数组
 static struct shmid_ds *shm_segs[SHMMNI];
-
+// 防止id回环
 static unsigned short shm_seq = 0; /* incremented, for recognizing stale ids */
 
 /* some statistics */
 static ulong swap_attempts = 0;
 static ulong swap_successes = 0;
 static ulong used_segs = 0;
-
+// 初始化共享内存管理的数据结构
 void shm_init (void)
 {
 	int id;
@@ -50,13 +52,14 @@ void shm_init (void)
 	shm_lock = NULL;
 	return;
 }
-
+// 通过键值找到对应的结构体
 static int findkey (key_t key)
 {
 	int id;
 	struct shmid_ds *shp;
 
 	for (id = 0; id <= max_shmid; id++) {
+		// 还没有分配内存，睡眠
 		while ((shp = shm_segs[id]) == IPC_NOID)
 			sleep_on (&shm_lock);
 		if (shp == IPC_UNUSED)
@@ -70,32 +73,37 @@ static int findkey (key_t key)
 /*
  * allocate new shmid_ds and pgtable. protected by shm_segs[id] = NOID.
  */
+// 根据键创建一个结构体
 static int newseg (key_t key, int shmflg, int size)
 {
 	struct shmid_ds *shp;
+	// 字节数/页大小=页数
 	int numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT;
 	int id, i;
-
+	// 校验
 	if (size < SHMMIN)
 		return -EINVAL;
 	if (shm_tot + numpages >= SHMALL)
 		return -ENOSPC;
 	for (id = 0; id < SHMMNI; id++)
 		if (shm_segs[id] == IPC_UNUSED) {
+			// 设置等待分配内存标记
 			shm_segs[id] = (struct shmid_ds *) IPC_NOID;
 			goto found;
 		}
 	return -ENOSPC;
 
 found:
+	// 分配一个新的shmid_ds结构体
 	shp = (struct shmid_ds *) kmalloc (sizeof (*shp), GFP_KERNEL);
 	if (!shp) {
+		// 没有内存可用，销毁之前分配的结构，唤醒等待该结构的进程，否则进程一直被阻塞
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 		if (shm_lock)
 			wake_up (&shm_lock);
 		return -ENOMEM;
 	}
-
+	// 分配一个指针数组，数组元素指向共享的物理内存
 	shp->shm_pages = (ulong *) kmalloc (numpages*sizeof(ulong),GFP_KERNEL);
 	if (!shp->shm_pages) {
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
@@ -104,52 +112,68 @@ found:
 		kfree(shp);
 		return -ENOMEM;
 	}
-
+	// 初始化shm_pages数组
 	for (i = 0; i < numpages; shp->shm_pages[i++] = 0);
+	// 使用的总页数累加
 	shm_tot += numpages;
 	shp->shm_perm.key = key;
 	shp->shm_perm.mode = (shmflg & S_IRWXUGO);
 	shp->shm_perm.cuid = shp->shm_perm.uid = current->euid;
 	shp->shm_perm.cgid = shp->shm_perm.gid = current->egid;
 	shp->shm_perm.seq = shm_seq;
+	// 该结构体管理的共享内存大小
 	shp->shm_segsz = size;
+	// 创建该结构体的进程
 	shp->shm_cpid = current->pid;
 	shp->attaches = NULL;
 	shp->shm_lpid = shp->shm_nattch = 0;
-	shp->shm_atime = shp->shm_dtime = 0;
+		shp->shm_atime = shp->shm_dtime = 0;
 	shp->shm_ctime = CURRENT_TIME;
+	// 该结构体管理的共享内存对应的页数大小
 	shp->shm_npages = numpages;
-
+	// 更新数组shm_segs当前最大索引
 	if (id > max_shmid)
 		max_shmid = id;
+	// 挂载
 	shm_segs[id] = shp;
 	used_segs++;
+	// 已经分配内存，唤醒等待该结构体的进程
 	if (shm_lock)
 		wake_up (&shm_lock);
 	return (unsigned int) shp->shm_perm.seq * SHMMNI + id;
 }
 
+// 创建或者获取key对应的共享内存
 int sys_shmget (key_t key, int size, int shmflg)
 {
 	struct shmid_ds *shp;
 	int id = 0;
-
+	
 	if (size < 0 || size > SHMMAX)
 		return -EINVAL;
+	//设置了IPC_PRIVATE直接创建一个新的 
 	if (key == IPC_PRIVATE)
 		return newseg(key, shmflg, size);
+	// 找不到key对应的数据
 	if ((id = findkey (key)) == -1) {
+		// 找不到也没有设置IPC_CREAT标记则返回不存在
 		if (!(shmflg & IPC_CREAT))
 			return -ENOENT;
+		// 没有则创建一个
 		return newseg(key, shmflg, size);
 	}
+	// 找到了但是设置了IPC_EXCL则返回以存在，IPC_EXCL说明该共享内存必须是由当前进程创建
 	if ((shmflg & IPC_CREAT) && (shmflg & IPC_EXCL))
 		return -EEXIST;
+	// 获取对应的结构体
 	shp = shm_segs[id];
+	// 已经被删除
 	if (shp->shm_perm.mode & SHM_DEST)
 		return -EIDRM;
+	// 大小超过了该共享内存的大小
 	if (size > shp->shm_segsz)
 		return -EINVAL;
+	// 检查权限
 	if (ipcperms (&shp->shm_perm, shmflg))
 		return -EACCES;
 	return (unsigned int) shp->shm_perm.seq * SHMMNI + id;
@@ -198,7 +222,7 @@ static void killseg (int id)
 	kfree(shp);
 	return;
 }
-
+// 管理管理共享内存的结构体
 int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 {
 	struct shmid_ds tbuf;
@@ -376,7 +400,7 @@ static struct vm_operations_struct shm_vm_ops = {
 static inline void insert_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
 {
 	struct vm_area_struct * attaches;
-
+	// 插入双向循环链表
 	if ((attaches = shp->attaches)) {
 		shmd->vm_next_share = attaches;
 		shmd->vm_prev_share = attaches->vm_prev_share;
@@ -388,7 +412,8 @@ static inline void insert_attach (struct shmid_ds * shp, struct vm_area_struct *
 
 /* Remove shmd from circular list shp->attaches */
 static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
-{
+{	
+	// 当前只有一个节点,直接置空头指针
 	if (shmd->vm_next_share == shmd) {
 		if (shp->attaches != shmd) {
 			printk("shm_close: shm segment (id=%ld) attach list inconsistent\n",
@@ -403,6 +428,7 @@ static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct *
 		}
 		shp->attaches = NULL;
 	} else {
+		// 删除的是第一个节点则更新头结点指针
 		if (shp->attaches == shmd)
 			shp->attaches = shmd->vm_next_share;
 		shmd->vm_prev_share->vm_next_share = shmd->vm_next_share;
@@ -448,6 +474,7 @@ static int shm_map (struct vm_area_struct *shmd)
 /*
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
  */
+// 使用共享内存
 int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 {
 	struct shmid_ds *shp;
@@ -466,10 +493,12 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		/* printk("shmat() -> EINVAL because shmid = %d is invalid\n",shmid); */
 		return -EINVAL;
 	}
-
+	// 没有显式需要map的地址
 	if (!(addr = (ulong) shmaddr)) {
+		// 但是设置了remap标记则报错
 		if (shmflg & SHM_REMAP)
 			return -EINVAL;
+		// 否则从当前进程中查找一个还没有被vm_area_struct管理的空间
 		if (!(addr = get_unmapped_area(shp->shm_segsz)))
 			return -ENOMEM;
 	} else if (addr & (SHMLBA-1)) {
@@ -483,17 +512,18 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EINVAL;
 	}
 	if (!(shmflg & SHM_REMAP))
+		// 查找addr这个地址是不是已经在vm_area_struct平衡树中
 		if ((shmd = find_vma_intersection(current, addr, addr + shp->shm_segsz))) {
 			/* printk("shmat() -> EINVAL because the interval [0x%lx,0x%lx) intersects an already mapped interval [0x%lx,0x%lx).\n",
 				addr, addr + shp->shm_segsz, shmd->vm_start, shmd->vm_end); */
 			return -EINVAL;
 		}
-
+	// 检查权限
 	if (ipcperms(&shp->shm_perm, shmflg & SHM_RDONLY ? S_IRUGO : S_IRUGO|S_IWUGO))
 		return -EACCES;
 	if (shp->shm_perm.seq != (unsigned int) shmid / SHMMNI)
 		return -EIDRM;
-
+	// 新建一个vm_area_struct结构
 	shmd = (struct vm_area_struct *) kmalloc (sizeof(*shmd), GFP_KERNEL);
 	if (!shmd)
 		return -ENOMEM;
@@ -516,18 +546,19 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_ops = &shm_vm_ops;
 
 	shp->shm_nattch++;            /* prevent destruction */
+	// 插入当前进程的vm_area_struct结构
 	if ((err = shm_map (shmd))) {
 		if (--shp->shm_nattch <= 0 && shp->shm_perm.mode & SHM_DEST)
 			killseg(id);
 		kfree(shmd);
 		return err;
 	}
-
+	// 插入管理共享内存的结构体attach链表，表示共享内存被映射到当前进程的某个地址
 	insert_attach(shp,shmd);  /* insert shmd into shp->attaches */
-
+	// 更新最后操作进程
 	shp->shm_lpid = current->pid;
 	shp->shm_atime = CURRENT_TIME;
-
+	// 返回映射地址
 	*raddr = addr;
 	return 0;
 }
@@ -626,6 +657,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 	}
 
 	pte_val(pte) = shp->shm_pages[idx];
+	// 还没有分配物理内存
 	if (!pte_present(pte)) {
 		unsigned long page = get_free_page(GFP_KERNEL);
 		if (!page) {
