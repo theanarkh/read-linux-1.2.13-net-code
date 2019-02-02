@@ -659,6 +659,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 	pte_val(pte) = shp->shm_pages[idx];
 	// 还没有分配物理内存
 	if (!pte_present(pte)) {
+		// 分配物理内存
 		unsigned long page = get_free_page(GFP_KERNEL);
 		if (!page) {
 			oom(current);

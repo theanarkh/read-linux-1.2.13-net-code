@@ -540,6 +540,7 @@ void release_sock(struct sock *sk)
 
 	save_flags(flags);
 	cli();
+	// socket处于节制状态，先不处理收到的数据包
 	if (sk->blog) 
 	{
 		restore_flags(flags);
@@ -550,6 +551,7 @@ void release_sock(struct sock *sk)
 	restore_flags(flags);
 #ifdef CONFIG_INET
 	/* See if we have any packets built up. */
+	// 把back_log队列的数据包放到receive_queue中
 	while((skb = skb_dequeue(&sk->back_log)) != NULL) 
 	{
 		sk->blog = 1;

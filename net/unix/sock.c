@@ -501,7 +501,7 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	{
 		return(i);
 	}
-	// 从unix_proto_data表中找到对应的unix_proto_data结构  
+	// 从unix_proto_data表中找到服务端对应的unix_proto_data结构  
 	serv_upd = unix_data_lookup(&sockun, sockaddr_len, inode);
 	iput(inode);
 	// 没有则说明服务端不存在
@@ -509,7 +509,7 @@ static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	{
 		return(-EINVAL);
 	}
-	
+	// 把客户端追加到服务端的连接队列，阻塞自己，等待服务器处理后唤醒
 	if ((i = sock_awaitconn(sock, serv_upd->socket, flags)) < 0) 
 	{
 		return(i);

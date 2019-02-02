@@ -26,18 +26,28 @@
 
 
 /* This is an entry in the IP routing table. */
+// 路由表项
 struct rtable 
 {
 	struct rtable		*rt_next;
+	// 目的IP
 	unsigned long		rt_dst;
+	// 子网掩码
 	unsigned long		rt_mask;
+	// 网关
 	unsigned long		rt_gateway;
+	// 各种标记位
 	unsigned char		rt_flags;
+	// 代价
 	unsigned char		rt_metric;
+	// 使用计数
 	short			rt_refcnt;
+	// 被使用标记
 	unsigned long		rt_use;
+	// MSS
 	unsigned short		rt_mss;
 	unsigned long		rt_window;
+	// 绑定的接口
 	struct device		*rt_dev;
 };
 

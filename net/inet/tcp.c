@@ -249,7 +249,7 @@ static void tcp_close(struct sock *sk, int timeout);
 /*
  *	The less said about this the better, but it works and will do for 1.2 
  */
-
+// 等待建立连接的进程队列
 static struct wait_queue *master_select_wakeup;
 
 static __inline__ int min(unsigned int a, unsigned int b)
@@ -279,7 +279,7 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 #endif	
 	/* This is a hack but it doesn't occur often and it's going to
 	   be a real        to fix nicely */
-	   
+	// 新状态为连接建立，老状态为syn_recv，则说明有连接可用，唤醒等待连接的进程队列 
 	if(state==TCP_ESTABLISHED && sk->state==TCP_SYN_RECV)
 	{
 		wake_up_interruptible(&master_select_wakeup);
@@ -303,12 +303,14 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
  *	Secondly we bin common duplicate forms at receive time
  *      Better heuristics welcome
  */
-   
+// 计算本端的接收窗口大小   
 int tcp_select_window(struct sock *sk)
-{
+{	
+	// 还有多少用于读的空间
 	int new_window = sk->prot->rspace(sk);
-	
+	// 路由项中设定的窗口大小	
 	if(sk->window_clamp)
+		// 取小的
 		new_window=min(sk->window_clamp,new_window);
 	/*
 	 * 	Two things are going on here.  First, we don't ever offer a
@@ -323,6 +325,7 @@ int tcp_select_window(struct sock *sk)
 	 *	new_window > sk->window but not by enough to allow for the
 	 *	shift in sequence space. 
 	 */
+	// 保证窗口不比之前的小，否则可能引起对端会传小数据包
 	if (new_window < min(sk->mss, MAX_WINDOW/2) || new_window < sk->window)
 		return(sk->window);
 	return(new_window);
@@ -371,11 +374,11 @@ static struct sk_buff *tcp_dequeue_established(struct sock *s)
  *	opened, but not yet accepted. Currently it is only called by
  *	tcp_close, and timeout mirrors the value there. 
  */
-
+// 用于listen型的socket
 static void tcp_close_pending (struct sock *sk) 
 {
 	struct sk_buff *skb;
-
+	// 置socket为释放状态，关闭建立的连接，释放读缓冲区空间
 	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) 
 	{
 		skb->sk->dead=1;
@@ -402,7 +405,7 @@ static void tcp_time_wait(struct sock *sk)
  *	A socket has timed out on its send queue and wants to do a
  *	little retransmitting. Currently this means TCP.
  */
-
+// 重传数据包，all等于0只重传一个，否则传多个
 void tcp_do_retransmit(struct sock *sk, int all)
 {
 	struct sk_buff * skb;
@@ -411,7 +414,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	int ct=0;
 
 	prot = sk->prot;
-	// 发送还没收到ack的skb队列
+	// 已发送还没收到ack的skb队列
 	skb = sk->send_head;
 
 	while (skb != NULL)
@@ -462,7 +465,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		 *	with might like to implement RFC1141/RFC1624 and speed
 		 *	this up by avoiding a full checksum.
 		 */
-
+		// 当前的ack
 		th->ack_seq = ntohl(sk->acked_seq);
 		th->window = ntohs(tcp_select_window(sk));
 		tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
@@ -495,7 +498,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		/*
 		 *	Count retransmissions
 		 */
-		 
+		// 累积重传的数据包的个数，不能超过拥塞窗口大小		 
 		ct++;
 
 		sk->prot->retransmits ++;
@@ -503,7 +506,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		/*
 		 *	Only one retransmit requested.
 		 */
-	
+		// all等于0说明只传一个数据包就行
 		if (!all)
 			break;
 
@@ -521,7 +524,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 /*
  *	Reset the retransmission timer
  */
-// 重置定时器 
+// 重置重传定时器 
 static void reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 {
 	del_timer(&sk->retransmit_timer);
@@ -542,7 +545,7 @@ static void reset_xmit_timer(struct sock *sk, int why, unsigned long when)
  * 	initiating a backoff.
  */
 
-// 重传，然后重置超时定时器
+// 重传，然后重置超时定时器,为rto
 void tcp_retransmit_time(struct sock *sk, int all)
 {
 	tcp_do_retransmit(sk, all);
@@ -589,7 +592,7 @@ static void tcp_retransmit(struct sock *sk, int all)
 	sk->ssthresh = sk->cong_window >> 1; /* remember window where we lost */
 	/* sk->ssthresh in theory can be zero.  I guess that's OK */
 	sk->cong_count = 0;
-
+	// 先传一个数据包
 	sk->cong_window = 1;
 
 	/* Do the actual retransmit. */
@@ -618,6 +621,7 @@ static int tcp_write_timeout(struct sock *sk)
 	/*
 	 *	Has it gone just too far ?
 	 */
+	// 重传次数超过限制
 	if (sk->retransmits > TCP_RETR2) 
 	{
 		sk->err = ETIMEDOUT;
@@ -626,6 +630,7 @@ static int tcp_write_timeout(struct sock *sk)
 		/*
 		 *	Time wait the socket 
 		 */
+		// 认为socket已经断开连接，准备或直接置为关闭状态
 		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING ) 
 		{
 			tcp_set_state(sk,TCP_TIME_WAIT);
@@ -663,6 +668,7 @@ static void retransmit_timer(unsigned long data)
 	 */
 
 	cli();
+	// socket正在被使用，一秒后重试
 	if (sk->inuse || in_bh) 
 	{
 		/* Try again in 1 second */
@@ -676,7 +682,7 @@ static void retransmit_timer(unsigned long data)
 	sti();
 
 	/* Always see if we need to send an ack. */
-
+	// 缓存的未发送ack的包个数
 	if (sk->ack_backlog && !sk->zapped) 
 	{
 		sk->prot->read_wakeup (sk);
@@ -690,7 +696,9 @@ static void retransmit_timer(unsigned long data)
 	{
 		/* Window probing */
 		case TIME_PROBE0:
+			// 发送探测窗口的数据包
 			tcp_send_probe0(sk);
+			// 是否超过了重试次数
 			tcp_write_timeout(sk);
 			break;
 		/* Retransmitting */
@@ -715,6 +723,7 @@ static void retransmit_timer(unsigned long data)
 				 *	Kicked by a delayed ack. Reset timer
 				 *	correctly now
 				 */
+				// 还没超时，重置定时器时间为剩下的超时时间
 				if (jiffies < skb->when + sk->rto) 
 				{
 					reset_xmit_timer (sk, TIME_WRITE, skb->when + sk->rto - jiffies);
@@ -725,6 +734,7 @@ static void retransmit_timer(unsigned long data)
 				/*
 				 *	Retransmission
 				 */
+				// 超时重传
 				sk->prot->retransmit (sk, 0);
 				tcp_write_timeout(sk);
 			}
@@ -736,9 +746,11 @@ static void retransmit_timer(unsigned long data)
 			 * this reset_timer() call is a hack, this is not
 			 * how KEEPOPEN is supposed to work.
 			 */
+			// 重置定时器，一定时间后继续发送保活数据包
 			reset_xmit_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 
 			/* Send something to keep the connection open. */
+			// 发送保活数据包
 			if (sk->prot->write_wakeup)
 				  sk->prot->write_wakeup (sk);
 			sk->retransmits++;
@@ -759,7 +771,7 @@ static void retransmit_timer(unsigned long data)
  * header points to the first 8 bytes of the tcp header.  We need
  * to find the appropriate port.
  */
-
+// 错误处理
 void tcp_err(int err, unsigned char *header, unsigned long daddr,
 	unsigned long saddr, struct inet_protocol *protocol)
 {
@@ -821,7 +833,7 @@ void tcp_err(int err, unsigned char *header, unsigned long daddr,
  *	in the received data queue (ie a frame missing that needs sending to us). Not
  *	sorting using two queues as data arrives makes life so much harder.
  */
-
+// 判断有多少可读的数据
 static int tcp_readable(struct sock *sk)
 {
 	unsigned long counted;
@@ -842,7 +854,7 @@ static int tcp_readable(struct sock *sk)
 	  		printk("empty\n");
 	  	return(0);
 	}
-  
+	// 应用程序可以读取但是还没读取的字节的序列号,即copied_seq之前的都已经读取
 	counted = sk->copied_seq;	/* Where we are at the moment */
 	amount = 0;
   
@@ -851,17 +863,23 @@ static int tcp_readable(struct sock *sk)
 	 */
 	 
 	do 
-	{
+	{	// 小于则退出，说明到达的包是乱序的，一般来说两者是等于
 		if (before(counted, skb->h.th->seq)) 	/* Found a hole so stops here */
 			break;
+		// counted - skb->h.th->seq一般是等于0的，如果大于0说明有一部分数据已经读过了，就跳过这部分数据
 		sum = skb->len -(counted - skb->h.th->seq);	/* Length - header but start from where we are up to (avoid overlaps) */
+		// sum代表的是每一个skb中消耗的序列号，所以如果是syn包，skb->len是等于0，但序列号要加1。
 		if (skb->h.th->syn)
 			sum++;
+		// 消耗了序列号
 		if (sum > 0) 
 		{					/* Add it up, move on */
+			// 可读的数据累加
 			amount += sum;
+			// 如果是syn包则可读的减一，和上面的加一对称，因为syn包只是消耗了序列号，并不包含数据
 			if (skb->h.th->syn) 
 				amount--;
+			// 消耗的序列号累加
 			counted += sum;
 		}
 		/*
@@ -896,14 +914,16 @@ static int tcp_readable(struct sock *sk)
 /*
  * LISTEN is a special case for select..
  */
+// 对于listen型的socket，用于I/O复用函数select
 static int tcp_listen_select(struct sock *sk, int sel_type, select_table *wait)
-{
+	{
 	if (sel_type == SEL_IN) {
 		int retval;
 
 		sk->inuse = 1;
 		retval = (tcp_find_established(sk) != NULL);
 		release_sock(sk);
+		// 没有建立的连接，阻塞等待唤醒
 		if (!retval)
 			select_wait(&master_select_wakeup,wait);
 		return retval;
@@ -920,20 +940,22 @@ static int tcp_listen_select(struct sock *sk, int sel_type, select_table *wait)
  *	go look at any of the socket buffers directly.
  */
 static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
-{
+{	// 监听型的socket，则判断是否有可用的连接
 	if (sk->state == TCP_LISTEN)
 		return tcp_listen_select(sk, sel_type, wait);
 
 	switch(sel_type) {
+	// 是否有数据可读
 	case SEL_IN:
 		if (sk->err)
 			return 1;
+		// 还没建立起连接，没有数据可读
 		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
 			break;
 
 		if (sk->shutdown & RCV_SHUTDOWN)
 			return 1;
-			
+		// 可读的等于已读的，没有数据可读			
 		if (sk->acked_seq == sk->copied_seq)
 			break;
 
@@ -942,19 +964,21 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 		    sk->urginline || !sk->urg_data)
 			return 1;
 		break;
-
+	// 能不能写
 	case SEL_OUT:
 		if (sk->err)
 			return 1;
+		// 已关闭不能写
 		if (sk->shutdown & SEND_SHUTDOWN) 
 			return 0;
+		// 还没建立连接不能写
 		if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
 			break;
 		/*
 		 * This is now right thanks to a small fix
 		 * by Matt Dillon.
 		 */
-
+		// 写空间不够不能写
 		if (sk->prot->wspace(sk) < sk->mtu+128+sk->prot->max_header)
 			break;
 		return 1;
@@ -964,6 +988,7 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 			return 1;
 		break;
 	}
+	// 阻塞
 	select_wait(sk->sleep, wait);
 	return 0;
 }
@@ -978,7 +1003,8 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 #ifdef FIXME	/* FIXME: */
 		case FIONREAD:
 #endif
-		{
+		{	
+			// 可读的数据长度
 			unsigned long amount;
 
 			if (sk->state == TCP_LISTEN) 
@@ -995,7 +1021,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			return(0);
 		}
 		case SIOCATMARK:
-		{
+		{	// 即将读取的是不是紧急数据
 			int answ = sk->urg_data && sk->urg_seq == sk->copied_seq;
 
 			err = verify_area(VERIFY_WRITE,(void *) arg,
@@ -1008,7 +1034,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		case TIOCOUTQ:
 		{
 			unsigned long amount;
-
+			// 还有多少写空间
 			if (sk->state == TCP_LISTEN) return(-EINVAL);
 			amount = sk->prot->wspace(sk);
 			err=verify_area(VERIFY_WRITE,(void *)arg,
@@ -1027,7 +1053,7 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 /*
  *	This routine computes a TCP checksum. 
  */
- 
+// 检验和 
 unsigned short tcp_check(struct tcphdr *th, int len,
 	  unsigned long saddr, unsigned long daddr)
 {     
@@ -1109,7 +1135,7 @@ unsigned short tcp_check(struct tcphdr *th, int len,
 }
 
 
-
+// 计算机校验和
 void tcp_send_check(struct tcphdr *th, unsigned long saddr, 
 		unsigned long daddr, int len, struct sock *sk)
 {
@@ -1122,7 +1148,7 @@ void tcp_send_check(struct tcphdr *th, unsigned long saddr,
  *	This is the main buffer sending routine. We queue the buffer
  *	having checked it is sane seeming.
  */
- 
+// 发送数据包 
 static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 {
 	int size;
@@ -1179,7 +1205,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	 *	b) We are retransmitting (Nagle's rule)
 	 *	c) We have too many packets 'in flight'
 	 */
-	 
+	// 包的序列号大于可以发送的最大序列号，正在进行超时重传（nagle算法规定只能有一个未收到确认的包，发出的包大于拥塞窗口了	 
 	if (after(skb->h.seq, sk->window_seq) ||
 	    (sk->retransmits && sk->ip_xmit_timeout == TIME_WRITE) ||
 	     sk->packets_out >= sk->cong_window) 
@@ -1192,7 +1218,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 			printk("tcp_send_partial: next != NULL\n");
 			skb_unlink(skb);
 		}
-		// 插入写待发送队列
+		// 插入待发送队列
 		skb_queue_tail(&sk->write_queue, skb);
 		
 		/*
@@ -1201,7 +1227,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		 *	send _first_ (This is what causes the Cisco and PC/TCP
 		 *	grief).
 		 */
-		 
+		// 可发送的最大序列号小于包的序列号，并且没有等待确认的包，则需要发送窗口探测包看能不能继续发送数据 
 		if (before(sk->window_seq, sk->write_queue.next->h.seq) &&
 		    sk->send_head == NULL && sk->ack_backlog == 0)
 			reset_xmit_timer(sk, TIME_PROBE0, sk->rto);
@@ -1232,7 +1258,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		 *	FIXME: We set this every time which means our 
 		 *	retransmits are really about a window behind.
 		 */
-
+		// 设置定时器用于超时重传
 		reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 	}
 }
@@ -1254,6 +1280,7 @@ struct sk_buff * tcp_dequeue_partial(struct sock * sk)
 	save_flags(flags);
 	cli();
 	skb = sk->partial;
+	// 只有一个包,取出来后直接置NULL，并且删除定时器，因为小包超时后也需要被强制发送出去
 	if (skb) {
 		sk->partial = NULL;
 		del_timer(&sk->partial_timer);
@@ -1265,7 +1292,7 @@ struct sk_buff * tcp_dequeue_partial(struct sock * sk)
 /*
  *	Empty the partial queue
  */
- 
+ // 发送小的数据包
 static void tcp_send_partial(struct sock *sk)
 {
 	struct sk_buff *skb;
@@ -1287,19 +1314,24 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 
 	save_flags(flags);
 	cli();
+	// 保存待发送的skb
 	tmp = sk->partial;
+	// 准备发送，删除超时发送的定时器
 	if (tmp)
 		del_timer(&sk->partial_timer);
+	// 保存新的skb
 	sk->partial = skb;
 	init_timer(&sk->partial_timer);
 	/*
 	 *	Wait up to 1 second for the buffer to fill.
 	 */
+	// 定时一秒后发送，一秒内如果有小块数据则继续填充到该skb
 	sk->partial_timer.expires = HZ;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
 	add_timer(&sk->partial_timer);
 	restore_flags(flags);
+	// 发送旧的skb
 	if (tmp)
 		tcp_send_skb(sk, tmp);
 }
@@ -1325,8 +1357,9 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 	 * We need to grab some memory, and put together an ack,
 	 * and then put it into the queue to be sent.
 	 */
-
+	// tcp+ip+mac头+4字节冗余校验
 	buff = sk->prot->wmalloc(sk, MAX_ACK_SIZE, 1, GFP_ATOMIC);
+	// 没有写空间了
 	if (buff == NULL) 
 	{
 		/* 
@@ -1335,7 +1368,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 		 *	bandwidth on slow links to send a spare ack than
 		 *	resend packets. 
 		 */
-		 
+		// 累积的未确认个数
 		sk->ack_backlog++;
 		if (sk->ip_xmit_timeout != TIME_WRITE && tcp_connected(sk->state)) 
 		{
@@ -1356,7 +1389,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 	/* 
 	 *	Put in the IP header and routing stuff. 
 	 */
-	 
+	// 构造ip+mac头
 	tmp = sk->prot->build_header(buff, sk->saddr, daddr, &dev,
 				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
 	if (tmp < 0) 
@@ -1365,20 +1398,23 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 		sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
 		return;
 	}
+	// 已用空间,tcp+ip+mac头大小
 	buff->len += tmp;
+	// 指向tcp头首地址
 	t1 =(struct tcphdr *)((char *)t1 +tmp);
-
+	// 复制tcp头
 	memcpy(t1, th, sizeof(*t1));
 
 	/*
 	 *	Swap the send and the receive. 
 	 */
-	 
+	// 源地址、目的地址
 	t1->dest = th->source;
 	t1->source = th->dest;
 	t1->seq = ntohl(sequence);
 	t1->ack = 1;
 	sk->window = tcp_select_window(sk);
+	// 本机窗口大小
 	t1->window = ntohs(sk->window);
 	t1->res1 = 0;
 	t1->res2 = 0;
@@ -1393,9 +1429,9 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 	 *	is on we are just doing an ACK timeout and need to switch
 	 *	to a keepalive.
 	 */
-	 
+	// 确认的序列号等于当前累积的确认号
 	if (ack == sk->acked_seq) 
-	{
+	{	// 当前未累积的确认书置0
 		sk->ack_backlog = 0;
 		sk->bytes_rcv = 0;
 		sk->ack_timed = 0;
@@ -1413,13 +1449,15 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
   	/*
   	 *	Fill in the packet and send it
   	 */
-  	 
+  	// 确认的序列号 
   	t1->ack_seq = ntohl(ack);
   	t1->doff = sizeof(*t1)/4;
+	// 计算校验和
   	tcp_send_check(t1, sk->saddr, daddr, sizeof(*t1), sk);
   	if (sk->debug)
   		 printk("\rtcp_ack: seq %lx ack %lx\n", sequence, ack);
   	tcp_statistics.TcpOutSegs++;
+	 // 发送
   	sk->prot->queue_xmit(sk, dev, buff, 1);
 }
 
@@ -1484,7 +1522,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		/*
 		 *	First thing we do is make sure that we are established. 
 		 */
-	
+		// 关闭了只能读不能写
 		if (sk->shutdown & SEND_SHUTDOWN) 
 		{
 			release_sock(sk);
@@ -1498,7 +1536,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		/* 
 		 *	Wait for a connection to finish.
 		 */
-	
+		// 处于不能写状态，close_wait是可写不可读，因为对端已经关闭了写		
 		while(sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT) 
 		{
 			if (sk->err) 
@@ -1510,7 +1548,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 				sk->err = 0;
 				return(tmp);
 			}
-
+			// syn和syn_recv状态的时候可以写，重复发包，否则是出错状态
 			if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV) 
 			{
 				release_sock(sk);
@@ -1573,7 +1611,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 	/* 
 	 *	Now we need to check if we have a half built packet. 
 	 */
-
+		// 先看是否有小块的数据被缓存起来，是的话先取出skb，不需要立刻发送的话再入队
 		if ((skb = tcp_dequeue_partial(sk)) != NULL) 
 		{
 		        int hdrlen;
@@ -1583,8 +1621,10 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			         + sizeof(struct tcphdr);
 	
 			/* Add more stuff to the end of skb->len */
+			// 不是紧急数据，则把数据追加到缓存的小包数据后面，是紧急数据则先把小包数据发出去，然后下一个循环再发普通数据
 			if (!(flags & MSG_OOB)) 
-			{
+			{	
+				// mss-数据长度等于还可以传多少长度的数据
 				copy = min(sk->mss - (skb->len - hdrlen), len);
 				/* FIXME: this is really a bug. */
 				if (copy <= 0) 
@@ -1592,18 +1632,25 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			  		printk("TCP: **bug**: \"copy\" <= 0!!\n");
 			  		copy = 0;
 				}
-	  
+	  			// 把用户的数据赋值copy长度个字节到数据包的数据部分
 				memcpy_fromfs(skb->data + skb->len, from, copy);
+				// 更新skb的data字段使用了多少字节
 				skb->len += copy;
+				// 下次复制的首地址
 				from += copy;
+				// 已复制的字节长度
 				copied += copy;
+				// 还有多少字节需要复制
 				len -= copy;
+				// 下一个发送的字节的序列号大小
 				sk->write_seq += copy;
 			}
+			// 数据部分大于等于mss或者是带外数据或者还没有发出去一个数据包则直接发送
 			if ((skb->len - hdrlen) >= sk->mss ||
 				(flags & MSG_OOB) || !sk->packets_out)
 				tcp_send_skb(sk, skb);
 			else
+				// 继续缓存，得到条件后一起发送
 				tcp_enqueue_partial(skb, sk);
 			continue;
 		}
@@ -1632,6 +1679,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 	 */
 	 
 		send_tmp = NULL;
+		// 不是紧急数据并且也小于mss，则需要缓存到partial队列，否则直接发送
 		if (copy < sk->mss && !(flags & MSG_OOB)) 
 		{
 			/*
@@ -1659,10 +1707,11 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		/*
 		 *	If we didn't get any memory, we need to sleep. 
 		 */
-
+		// 没有写空间了
 		if (skb == NULL) 
 		{
 			sk->socket->flags |= SO_NOSPACE;
+			// 非阻塞直接返回已经写入的字节
 			if (nonblock) 
 			{
 				release_sock(sk);
@@ -1676,11 +1725,13 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 			 */
 
 			tmp = sk->wmem_alloc;
+			// 这个函数会处理收到的数据包，如果收到ack包则会腾出写空间
 			release_sock(sk);
 			cli();
 			/*
 			 *	Again we will try to avoid it. 
 			 */
+			// 处于可写状态但是没有写空间，则阻塞
 			if (tmp <= sk->wmem_alloc &&
 				  (sk->state == TCP_ESTABLISHED||sk->state == TCP_CLOSE_WAIT)
 				&& sk->err == 0) 
@@ -1760,12 +1811,13 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		skb->free = 0;
 		// 更新下一个tcp报文的序列化
 		sk->write_seq += copy;
-	
+		// 数据量太少并且不是紧急数据，并且有待确认的包（nagle算法规则），则先缓存
 		if (send_tmp != NULL && sk->packets_out) 
 		{
 			tcp_enqueue_partial(send_tmp, sk);
 			continue;
 		}
+		// 否则直接发送
 		tcp_send_skb(sk, skb);
 	}
 	sk->err = 0;
@@ -1780,7 +1832,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 /*
  *	Avoid possible race on send_tmp - c/o Johannes Stille 
  */
- 
+	// 符合nagle算法条件或者没有开启nagle算法且序列号合法则发送
 	if(sk->partial && ((!sk->packets_out) 
      /* If not nagling we can send on the before case too.. */
 	      || (sk->nonagle && before(sk->write_seq , sk->window_seq))
@@ -1798,7 +1850,8 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 static int tcp_sendto(struct sock *sk, unsigned char *from,
 	   int len, int nonblock, unsigned flags,
 	   struct sockaddr_in *addr, int addr_len)
-{
+{	
+	// 只支持两个flag
 	if (flags & ~(MSG_OOB|MSG_DONTROUTE))
 		return -EINVAL;
 	if (sk->state == TCP_CLOSE)
@@ -1826,7 +1879,7 @@ static void tcp_read_wakeup(struct sock *sk)
 	struct device *dev = NULL;
 	struct tcphdr *t1;
 	struct sk_buff *buff;
-
+	// 没有待确认的数据包
 	if (!sk->ack_backlog) 
 		return;
 
@@ -1834,6 +1887,7 @@ static void tcp_read_wakeup(struct sock *sk)
 	 * If we're closed, don't send an ack, or we'll get a RST
 	 * from the closed destination.
 	 */
+	// 连接关闭就不需要发了
 	if ((sk->state == TCP_CLOSE) || (sk->state == TCP_TIME_WAIT))
 		return; 
 
@@ -1885,6 +1939,7 @@ static void tcp_read_wakeup(struct sock *sk)
 	t1->urg = 0;
 	t1->syn = 0;
 	t1->psh = 0;
+	// 重置待确认数据包个数
 	sk->ack_backlog = 0;
 	sk->bytes_rcv = 0;
 	sk->window = tcp_select_window(sk);
@@ -1916,7 +1971,7 @@ static void cleanup_rbuf(struct sock *sk)
   
 	save_flags(flags);
 	cli();
-  
+	// 还有多少读空间
 	left = sk->prot->rspace(sk);
  
 	/*
@@ -1998,6 +2053,7 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 	/*
 	 *	No URG data to read
 	 */
+	// 没有紧急数据或者紧急数据当作普通数据处理了
 	if (sk->urginline || !sk->urg_data || sk->urg_data == URG_READ)
 		return -EINVAL;	/* Yes this is right ! */
 		
@@ -2028,6 +2084,7 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 		char c = sk->urg_data;
 		if (!(flags & MSG_PEEK))
 			sk->urg_data = URG_READ;
+		// 只读一个字节
 		put_fs_byte(c, to);
 		release_sock(sk);
 		return 1;
@@ -2283,28 +2340,34 @@ static int tcp_read(struct sock *sk, unsigned char *to,
  *	states. A shutdown() may have already sent the FIN, or we may be
  *	closed.
  */
- 
+// 根据socket的当前状态修改下一个状态 
 static int tcp_close_state(struct sock *sk, int dead)
-{
+{	
+	// 默认状态是关闭
 	int ns=TCP_CLOSE;
+	// 默认不需要发送fin包
 	int send_fin=0;
 	switch(sk->state)
-	{
+	{   // 还没有建立连接，直接转为关闭状态
 		case TCP_SYN_SENT:	/* No SYN back, no FIN needed */
 			break;
+		// 收到syn包并且发出了ack，对方也可能已经收到了ack把状态置为已建立，所以需要发送fin包，并把状态置为fin_wait1
 		case TCP_SYN_RECV:
 		case TCP_ESTABLISHED:	/* Closedown begin */
 			ns=TCP_FIN_WAIT1;
 			send_fin=1;
 			break;
+		// 本端已关闭，即已经发送了fin包，不需要再发送了，状态不变
 		case TCP_FIN_WAIT1:	/* Already closing, or FIN sent: no change */
 		case TCP_FIN_WAIT2:
 		case TCP_CLOSING:
 			ns=sk->state;
 			break;
+		// 直接置为关闭状态
 		case TCP_CLOSE:
 		case TCP_LISTEN:
 			break;
+		// 对端已关闭，现在是本端准备关闭，需要发送fin包，然后进入last_ack状态
 		case TCP_CLOSE_WAIT:	/* They have FIN'd us. We send our FIN and
 					   wait only for the ACK */
 			ns=TCP_LAST_ACK;
@@ -2322,6 +2385,7 @@ static int tcp_close_state(struct sock *sk, int dead)
 	 *	that we won't make the old 4*rto = almost no time - whoops
 	 *	reset mistake.
 	 */
+	// 如果是本端已经关闭，在等待对端关闭的状态，则设置一个定时器，如果超时还没有收到对端的fin包则强行关闭
 	if(dead && ns==TCP_FIN_WAIT2)
 	{
 		int timer_active=del_timer(&sk->timer);
@@ -2454,7 +2518,7 @@ static void tcp_send_fin(struct sock *sk)
  *	Shutdown the sending side of a connection. Much like close except
  *	that we don't receive shut down or set sk->dead=1.
  */
-
+// 半关闭
 void tcp_shutdown(struct sock *sk, int how)
 {
 	/*
@@ -2469,7 +2533,7 @@ void tcp_shutdown(struct sock *sk, int how)
 	/*
 	 *	If we've already sent a FIN, or it's a closed state
 	 */
-	 
+	// 已经关闭了写端或者是监听套接字则返回，不需要关闭了
 	if (sk->state == TCP_FIN_WAIT1 ||
 	    sk->state == TCP_FIN_WAIT2 ||
 	    sk->state == TCP_CLOSING ||
@@ -2486,13 +2550,13 @@ void tcp_shutdown(struct sock *sk, int how)
 	/*
 	 * flag that the sender has shutdown
 	 */
-
+	// 设置flag
 	sk->shutdown |= SEND_SHUTDOWN;
 
 	/*
 	 *  Clear out any half completed packets. 
 	 */
-
+	// 还有小数据包则发送出去
 	if (sk->partial)
 		tcp_send_partial(sk);
 		
@@ -2506,7 +2570,7 @@ void tcp_shutdown(struct sock *sk, int how)
 	release_sock(sk);
 }
 
-
+// 读取数据并且获取对端地址
 static int
 tcp_recvfrom(struct sock *sk, unsigned char *to,
 	     int to_len, int nonblock, unsigned flags,
@@ -2722,7 +2786,7 @@ extern inline unsigned long tcp_init_seq(void)
  *	This also means it will be harder to close a socket which is
  *	listening.
  */
- 
+// 收到一个syn包时的处理 
 static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		 unsigned long daddr, unsigned long saddr,
 		 struct options *opt, struct device *dev, unsigned long seq)
@@ -2735,16 +2799,16 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	struct device *ndev=NULL;
 	int tmp;
 	struct rtable *rt;
-  
+	
 	th = skb->h.th;
-
+	// data_ready是唤醒阻塞在accept函数的进程，而这次还没建立起连接，执行回调没有意义
 	/* If the socket is dead, don't accept the connection. */
 	if (!sk->dead) 
 	{
   		sk->data_ready(sk,0);
 	}
 	else 
-	{
+	{	// 该socket已经处于释放状态，发送reset包
 		if(sk->debug)
 			printk("Reset on %p: Connect on dead socket.\n",sk);
 		tcp_reset(daddr, saddr, th, sk->prot, opt, dev, sk->ip_tos,sk->ip_ttl);
@@ -2757,7 +2821,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 * Make sure we can accept more.  This will prevent a
 	 * flurry of syns from eating up all our memory.
 	 */
-
+	// 如果当前的半连接+已连接队列大小大于等于最大值则丢包
 	if (sk->ack_backlog >= sk->max_ack_backlog) 
 	{
 		tcp_statistics.TcpAttemptFails++;
@@ -2772,7 +2836,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 * and if the listening socket is destroyed before this is taken
 	 * off of the queue, this will take care of it.
 	 */
-
+	// 分配一个新的sock结构用于连接连接
 	newsk = (struct sock *) kmalloc(sizeof(struct sock), GFP_ATOMIC);
 	if (newsk == NULL) 
 	{
@@ -2781,7 +2845,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		kfree_skb(skb, FREE_READ);
 		return;
 	}
-
+	// 从listen套接字复制内容，再覆盖某些字段
 	memcpy(newsk, sk, sizeof(*newsk));
 	skb_queue_head_init(&newsk->write_queue);
 	skb_queue_head_init(&newsk->receive_queue);
@@ -2811,17 +2875,24 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->err = 0;
 	newsk->shutdown = 0;
 	newsk->ack_backlog = 0;
+	// 期待收到的对端下一个字节的序列号
 	newsk->acked_seq = skb->h.th->seq+1;
+	// 进程可以读但是还没有读取的字节序列号
 	newsk->copied_seq = skb->h.th->seq+1;
+	// 当收到对端fin包的时候，回复的ack包中的序列号	
 	newsk->fin_seq = skb->h.th->seq;
 	newsk->state = TCP_SYN_RECV;
 	newsk->timeout = 0;
 	newsk->ip_xmit_timeout = 0;
+	// 下一个发送的字节的序列号
 	newsk->write_seq = seq; 
+	// 可发送的字节序列号最大值
 	newsk->window_seq = newsk->write_seq;
+	// 序列号小于rcv_ack_seq的数据包都已经收到
 	newsk->rcv_ack_seq = newsk->write_seq;
 	newsk->urg_data = 0;
 	newsk->retransmits = 0;
+	// 关闭套接字的时候不需要等待一段时间才能关闭
 	newsk->linger=0;
 	newsk->destroy = 0;
 	init_timer(&newsk->timer);
@@ -2830,6 +2901,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	init_timer(&newsk->retransmit_timer);
 	newsk->retransmit_timer.data = (unsigned long)newsk;
 	newsk->retransmit_timer.function=&retransmit_timer;
+	// 记录ip
 	newsk->dummy_th.source = skb->h.th->dest;
 	newsk->dummy_th.dest = skb->h.th->source;
 	
@@ -2839,7 +2911,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 
 	newsk->daddr = saddr;
 	newsk->saddr = daddr;
-
+	// 放到tcp的socket哈希队列
 	put_sock(newsk->num,newsk);
 	newsk->dummy_th.res1 = 0;
 	newsk->dummy_th.doff = 6;
@@ -2901,9 +2973,9 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	/*
 	 *	This will min with what arrived in the packet 
 	 */
-
+	// 解析tcp选项
 	tcp_options(newsk,skb->h.th);
-
+	// 分配一个skb
 	buff = newsk->prot->wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
 	if (buff == NULL) 
 	{
@@ -2916,7 +2988,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		tcp_statistics.TcpAttemptFails++;
 		return;
 	}
-  
+	// skb和sock关联
 	buff->len = sizeof(struct tcphdr)+4;
 	buff->sk = newsk;
 	buff->localroute = newsk->localroute;
@@ -2995,7 +3067,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	tcp_statistics.TcpOutSegs++;
 }
 
-
+// 关闭一个socket
 static void tcp_close(struct sock *sk, int timeout)
 {
 	/*
@@ -3004,12 +3076,12 @@ static void tcp_close(struct sock *sk, int timeout)
 	 */
 	
 	sk->inuse = 1;
-	
+	// 监听型的socket要关闭建立的连接
 	if(sk->state == TCP_LISTEN)
 	{
 		/* Special case */
 		tcp_set_state(sk, TCP_CLOSE);
-		// 丢弃接收队列中的数据包，还没建立连接的
+		// 关闭已经建立的连接
 		tcp_close_pending(sk);
 		release_sock(sk);
 		return;
@@ -3030,13 +3102,13 @@ static void tcp_close(struct sock *sk, int timeout)
 		 *  descriptor close, not protocol-sourced closes, because the
 		 *  reader process may not have drained the data yet!
 		 */
-		 
+		// 销毁未处理的数据 
 		while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 			kfree_skb(skb, FREE_READ);
 		/*
 		 *	Get rid off any half-completed packets. 
 		 */
-
+		// 有小数据包则发送
 		if (sk->partial) 
 			tcp_send_partial(sk);
 	}
@@ -3873,7 +3945,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	 */
 	// 接收到的数据总大小	   
 	sk->bytes_rcv += skb->len;
-	// 这个包没有数据并且不是fin包
+	// 这个包没有数据并且不是fin包，即一个探测包
 	if (skb->len == 0 && !th->fin) 
 	{
 		/* 
@@ -3891,7 +3963,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	 */
 
 #ifndef TCP_DONT_RST_SHUTDOWN		 
-
+	// 本端发送数据端已经关闭，
 	if(sk->shutdown & RCV_SHUTDOWN)
 	{
 		/*
@@ -3953,7 +4025,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	 *	 forwards from the first hole based upon real traffic patterns.]
 	 *	
 	 */
-
+	// 接收队列是空则直接赋值成为第一个节点，否则插入接收队列的相应位置
 	if (skb_peek(&sk->receive_queue) == NULL) 	/* Empty queue is easy case */
 	{
 		skb_queue_head(&sk->receive_queue,skb);
@@ -3979,9 +4051,9 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 			 *	discard the previous frame (safe as sk->inuse is set) and put
 			 *	the new one in its place.
 			 */
-			 
+			// 和某个节点的序列号一样但是数据比他多，则删除旧的skb，插入新的skb
 			if (th->seq==skb1->h.th->seq && skb->len>= skb1->len)
-			{
+			{	
 				skb_append(skb1,skb);
 				skb_unlink(skb1);
 				kfree_skb(skb1,FREE_READ);
@@ -4014,8 +4086,9 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 	/*
 	 *	Figure out what the ack value for this frame is
 	 */
-	 
+	// ack等于收到的序列号+数据长度 
  	th->ack_seq = th->seq + skb->len;
+	// syn和fin都占一个序列号
  	if (th->syn) 
  		th->ack_seq++;
  	if (th->fin)
@@ -4624,7 +4697,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	/*
 	 *	Find the socket.
 	 */
-
+	// 从tcp的socket哈希链表中找到对应的socket结构
 	sk = get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
 
 	/*
@@ -4638,7 +4711,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   	// 该socket无效 
 	if (sk!=NULL && (sk->zapped || sk->state==TCP_CLOSE))
 		sk=NULL;
-
+	// 数据包是新的还是之前被缓存下来的，redo=1表示缓存的
 	if (!redo) 
 	{	// 检查校验和
 		if (tcp_check(th, len, saddr, daddr )) 
@@ -4678,6 +4751,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	
 		/* We may need to add it to the backlog here. */
 		cli();
+		// socket正在被使用，缓存到back_log队列
 		if (sk->inuse) 
 		{
 			skb_queue_tail(&sk->back_log, skb);
@@ -4727,16 +4801,16 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	compatibility. We also set up variables more thoroughly [Karn notes in the
 	 *	KA9Q code the RFC793 incoming segment rules don't initialise the variables for all paths].
 	 */
-
+	// 不是通信数据包，因为连接还没有建立
 	if(sk->state!=TCP_ESTABLISHED)		/* Skip this lot for normal flow */
 	{
 	
 		/*
 		 *	Now deal with unusual cases.
 		 */
-		
+		// 是监听socket则可能是一个syn包	
 		if(sk->state==TCP_LISTEN)
-		{
+		{	// 不存在收到ack包的可能，发送重置包
 			if(th->ack)	/* These use the socket TOS.. might want to be the received TOS */
 				tcp_reset(daddr,saddr,th,sk->prot,opt,dev,sk->ip_tos, sk->ip_ttl);
 
@@ -4746,7 +4820,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			 *	netmask on a running connection it can go broadcast. Even Sun's have
 			 *	this problem so I'm ignoring it 
 			 */
-			   
+			// 不存在这种可能的各种情况，直接丢包			   
 			if(th->rst || !th->syn || th->ack || ip_chk_addr(daddr)!=IS_MYADDR)
 			{
 				kfree_skb(skb, FREE_READ);
@@ -4757,7 +4831,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			/*	
 			 *	Guess we need to make a new socket up 
 			 */
-		
+			// 是个syn包，建立连接
 			tcp_conn_request(sk, skb, daddr, saddr, opt, dev, tcp_init_seq());
 		
 			/*
@@ -4772,9 +4846,10 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			release_sock(sk);
 			return 0;
 		}
-	
+		// 没有建立连接，又不是listen的socket
 		/* retransmitted SYN? */
 		// recv状态的时候又收到syn包则丢弃
+		// syn_recv状态又收到syn包并且和旧的syn包一样，说明是重传了syn包，直接丢弃
 		if (sk->state == TCP_SYN_RECV && th->syn && th->seq+1 == sk->acked_seq)
 		{
 			kfree_skb(skb, FREE_READ);
@@ -4786,14 +4861,15 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		 *	SYN sent means we have to look for a suitable ack and either reset
 		 *	for bad matches or go to connected 
 		 */
-	   
+		// 发送了syn包
 		if(sk->state==TCP_SYN_SENT)
 		{
 			/* Crossed SYN or previous junk segment */
-			// ack包
+			// 发送了syn包，收到ack包说明可能是建立连接的ack包
 			if(th->ack)
 			{
 				/* We got an ack, but it's not a good ack */
+				// ack包不对，发送重置包
 				if(!tcp_ack(sk,th,saddr,len))
 				{
 					/* Reset the ack - its an ack from a 
@@ -4805,9 +4881,10 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					release_sock(sk);
 					return(0);
 				}
-				// 重置包
+				// 尝试连接但是对端回复了重置包
 				if(th->rst)
 					return tcp_std_reset(sk,skb);
+				// 不合法情况，丢包
 				if(!th->syn)
 				{
 					/* A valid ack from a different connection
@@ -4820,14 +4897,21 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				 *	Ok.. it's good. Set up sequence numbers and
 				 *	move to established.
 				 */
+				// 建立连接的回包 
 				syn_ok=1;	/* Don't reset this connection for the syn */
+				// 期待收到对端下一个的序列号
 				sk->acked_seq=th->seq+1;
 				sk->fin_seq=th->seq;
+				// 发送第三次握手的ack包，进入连接建立状态
 				tcp_send_ack(sk->sent_seq,sk->acked_seq,sk,th,sk->daddr);
 				tcp_set_state(sk, TCP_ESTABLISHED);
+				// 解析tcp选项
 				tcp_options(sk,th);
+				// 记录对端地址
 				sk->dummy_th.dest=th->source;
+				// 可以读取但是还没读取的序列号
 				sk->copied_seq = sk->acked_seq;
+				// 唤醒阻塞在accept函数的进程
 				if(!sk->dead)
 				{
 					sk->state_change(sk);
@@ -4842,6 +4926,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			else
 			{
 				/* See if SYN's cross. Drop if boring */
+				// 对端没有对本端的syn回复，也发了syn包，即同时建立
 				if(th->syn && !th->rst)
 				{
 					/* Crossed SYN's are fine - but talking to
@@ -4853,6 +4938,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 						tcp_statistics.TcpAttemptFails++;
 						return tcp_std_reset(sk,skb);
 					}
+					// 进入syn_recv状态，等待第二次握手的ack
 					tcp_set_state(sk,TCP_SYN_RECV);
 					
 					/*
@@ -4876,9 +4962,10 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	a more complex suggestion for fixing these reuse issues in RFC1644
 	 *	but not yet ready for general use. Also see RFC1379.
 	 */
-	
+	// 不符合上面的状态
 #define BSD_TIME_WAIT
 #ifdef BSD_TIME_WAIT
+		// 处于2msl状态的socket又收到了一个syn包
 		if (sk->state == TCP_TIME_WAIT && th->syn && sk->dead && 
 			after(th->seq, sk->acked_seq) && !th->rst)
 		{
@@ -4892,6 +4979,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			tcp_set_state(sk, TCP_CLOSE);
 			sk->shutdown = SHUTDOWN_MASK;
 			release_sock(sk);
+			// 是否有一个listen状态的socket，是的话重新建立一个连接
 			sk=get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
 			if (sk && sk->state==TCP_LISTEN)
 			{
@@ -4913,14 +5001,14 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Note most of these are inline now. I'll inline the lot when
 	 *	I have time to test it hard and look at what gcc outputs 
 	 */
-	
+	// 数据通信的ack包
 	if(!tcp_sequence(sk,th,len,opt,saddr,dev))
 	{
 		kfree_skb(skb, FREE_READ);
 		release_sock(sk);
 		return 0;
 	}
-
+	// 正在通信的时候，对端变成不可写，回复了重置包
 	if(th->rst)
 		return tcp_std_reset(sk,skb);
 	
@@ -4938,7 +5026,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Process the ACK
 	 */
 	 
-
+	// 正常数据通信的ack包
 	if(th->ack && !tcp_ack(sk,th,saddr,len))
 	{
 		/*
@@ -4991,14 +5079,14 @@ rfc_step6:		/* I'll clean this up later */
  *	This routine sends a packet with an out of date sequence
  *	number. It assumes the other end will try to ack it.
  */
-
+// 发送一个探测数据包，探测对端是否可写
 static void tcp_write_wakeup(struct sock *sk)
 {
 	struct sk_buff *buff;
 	struct tcphdr *t1;
 	struct device *dev=NULL;
 	int tmp;
-
+	// socket已经被重置
 	if (sk->zapped)
 		return;	/* After a valid reset we can send no more */
 
@@ -5047,7 +5135,7 @@ static void tcp_write_wakeup(struct sock *sk)
 	 *	Use a previous sequence.
 	 *	This should cause the other end to send an ack.
 	 */
-	 
+	// 发送一个旧的序列号，期待对端发送ack并且告之当前的接收窗口大小	 
 	t1->seq = htonl(sk->sent_seq-1);
 	t1->ack = 1; 
 	t1->res1= 0;
@@ -5057,7 +5145,9 @@ static void tcp_write_wakeup(struct sock *sk)
 	t1->psh = 0;
 	t1->fin = 0;	/* We are sending a 'previous' sequence, and 0 bytes of data - thus no FIN bit */
 	t1->syn = 0;
+	// ack为期待对端发送的下一个序列号
 	t1->ack_seq = ntohl(sk->acked_seq);
+	// 本端的接收窗口大小
 	t1->window = ntohs(tcp_select_window(sk));
 	t1->doff = sizeof(*t1)/4;
 	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
@@ -5109,6 +5199,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
 
 	switch(optname)
 	{
+		// 设置mss
 		case TCP_MAXSEG:
 /*
  * values greater than interface MTU won't take effect.  however at
@@ -5119,6 +5210,7 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval, int op
 				return -EINVAL;
 			sk->user_mss=val;
 			return 0;
+		// 设置nagle算法是否开启
 		case TCP_NODELAY:
 			sk->nonagle=(val==0)?0:1;
 			return 0;

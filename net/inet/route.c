@@ -3,7 +3,7 @@
  *		operating system.  INET is implemented using the  BSD Socket
  *		interface as the means of communication with the user level.
  *
- *		ROUTE - implementation of the IP router.
+ *		ROUTE i- implementation of the IP router.
  *
  * Version:	@(#)route.c	1.0.14	05/31/93
  *
@@ -55,13 +55,13 @@
 /*
  *	The routing table list
  */
-
+// 路由表是一个链表
 static struct rtable *rt_base = NULL;
 
 /*
  *	Pointer to the loopback route
  */
- 
+// 回环路由链表
 static struct rtable *rt_loopback = NULL;
 
 /*
@@ -98,7 +98,7 @@ static void rt_del(unsigned long dst, char *devname)
 		/*
 		 *	If we delete the loopback route update its pointer.
 		 */
-		 
+		// 删除的是回环地址 
 		if (rt_loopback == r)
 			rt_loopback = NULL;
 		kfree_s(r, sizeof(struct rtable));
@@ -163,7 +163,13 @@ static unsigned long guess_mask(unsigned long dst, struct device * dev)
 
 	if (!dst)
 		return 0;
+	// 获取掩码
 	mask = default_mask(dst);
+	/*
+		异或后再和掩码与，如果为0说明网络是不一样的，因为如果网络一样，
+		异或后网络部分值为0，再和掩码与也是等于0。所以网络不一样的时候，返回目的ip的掩码，
+		否则返回本地主机网络的掩码
+	*/
 	if ((dst ^ dev->pa_addr) & mask)
 		return mask;
 	return dev->pa_mask;
@@ -173,21 +179,25 @@ static unsigned long guess_mask(unsigned long dst, struct device * dev)
 /*
  *	Find the route entry through which our gateway will be reached
  */
- 
+// 查找网关对应的设备，即通过该设备可以达到该网关
 static inline struct device * get_gw_dev(unsigned long gw)
 {
 	struct rtable * rt;
 
 	for (rt = rt_base ; ; rt = rt->rt_next) 
-	{
+	{	// 查找完都没找到
 		if (!rt)
 			return NULL;
+		/*
+			查找和该网关的在同一个网络的ip，从而知道到达该网关的设备，
+			如果if里面是true说明网关和当前路由项的目的地址不在一个网络，则不能直接到达，
+		*/
 		if ((gw ^ rt->rt_dst) & rt->rt_mask)
 			continue;
 		/* 
 		 *	Gateways behind gateways are a no-no 
 		 */
-		 
+		// 到达网关的是另一个网关，说明无法直接到达，一般的网关是直接到达的 
 		if (rt->rt_flags & RTF_GATEWAY)
 			return NULL;
 		return rt->rt_dev;
@@ -221,12 +231,13 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	/*
 	 *	Calculate the network mask
 	 */
-	 
+	// 没有传掩码 
 	else if (!mask) 
-	{
+	{	// 和设备对应的ip在同一个网络，则掩码等于设备对应ip的掩码，否则猜测一个掩码
 		if (!((dst ^ dev->pa_addr) & dev->pa_mask)) 
 		{
 			mask = dev->pa_mask;
+			// 清除是网关标记位，因为可以直接到到
 			flags &= ~RTF_GATEWAY;
 			if (flags & RTF_DYNAMIC) 
 			{
@@ -236,22 +247,23 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 		} 
 		else
 			mask = guess_mask(dst, dev);
+		// 取网络部分
 		dst &= mask;
 	}
 	
 	/*
 	 *	A gateway must be reachable and not a local address
 	 */
-	 
+	// 清除是网关标记位 
 	if (gw == dev->pa_addr)
 		flags &= ~RTF_GATEWAY;
-		
+	// 如果是一个网关	
 	if (flags & RTF_GATEWAY) 
 	{
 		/*
 		 *	Don't try to add a gateway we can't reach.. 
 		 */
-		 
+		// 网关的设备和传进来的设备不一致 
 		if (dev != get_gw_dev(gw))
 			return;
 			
@@ -270,7 +282,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 		return;
 	}
 	memset(rt, 0, sizeof(struct rtable));
-	rt->rt_flags = flags | RTF_UP;
+	rt->rt_flags = flags | RTF_UP;// 可用
 	rt->rt_dst = dst;
 	rt->rt_dev = dev;
 	rt->rt_gateway = gw;
@@ -299,7 +311,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	/*
 	 *	Remove old route if we are getting a duplicate. 
 	 */
-	 
+	// 删除旧的
 	rp = &rt_base;
 	while ((r = *rp) != NULL) 
 	{
@@ -318,9 +330,10 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	/*
 	 *	Add the new route 
 	 */
-	 
+	// 插入链表 
 	rp = &rt_base;
 	while ((r = *rp) != NULL) {
+		
 		if ((r->rt_mask & mask) != mask)
 			break;
 		rp = &r->rt_next;
@@ -331,7 +344,7 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	/*
 	 *	Update the loopback route
 	 */
-	 
+	// 如果是回环地址且还没有回环地址则更新rt_loopback链表，所以只有一个回环地址
 	if ((rt->rt_dev->flags & IFF_LOOPBACK) && !rt_loopback)
 		rt_loopback = rt;
 		
@@ -466,7 +479,7 @@ static int rt_new(struct rtentry *r)
 	return 0;
 }
 
-
+	
 /*
  *	Remove a route, as requested by the user.
  */
@@ -590,13 +603,13 @@ struct rtable * ip_rt_local(unsigned long daddr, struct options *opt, unsigned l
 		 */
 		if (rt->rt_flags&RTF_GATEWAY)
 			continue;
-			
+		// true则是同一个网络
 		if (!((rt->rt_dst ^ daddr) & rt->rt_mask))
 			break;
 		/*
 		 *	broadcast addresses can be special cases.. 
 		 */
-		 
+		// 是广播地址并且设备支持广播
 		if ((rt->rt_dev->flags & IFF_BROADCAST) &&
 		     rt->rt_dev->pa_brdaddr == daddr)
 			break;
@@ -604,8 +617,9 @@ struct rtable * ip_rt_local(unsigned long daddr, struct options *opt, unsigned l
 	
 	if(src_addr!=NULL)
 		*src_addr= rt->rt_dev->pa_addr;
-		
+	// 目的地址等于设备的地址说明是回环地址
 	if (daddr == rt->rt_dev->pa_addr) {
+		// 没有可用的回环地址
 		if ((rt = rt_loopback) == NULL)
 			goto no_route;
 	}

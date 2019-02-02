@@ -467,7 +467,7 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 	}
 	dir->i_count++;
 	down(&dir->i_sem);
-	// 新建一个文件
+	// 新建一个文件	
 	error = dir->i_op->mknod(dir,basename,namelen,mode,dev);
 	up(&dir->i_sem);
 	iput(dir);

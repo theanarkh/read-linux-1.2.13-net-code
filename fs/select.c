@@ -72,8 +72,9 @@ static int check(int flag, select_table * wait, struct file * file)
 	struct inode * inode;
 	struct file_operations *fops;
 	int (*select) (struct inode *, struct file *, int, select_table *);
-
+	// 文件描述符对应的file结构对应的inode节点
 	inode = file->f_inode;
+	// 执行底层的select函数
 	if ((fops = file->f_op) && (select = fops->select))
 		return select(inode, file, flag, wait)
 		    || (wait && select(inode, file, flag, NULL));
@@ -91,28 +92,37 @@ static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	unsigned long set;
 	int i,j;
 	int max = -1;
-
+	
 	for (j = 0 ; j < __FDSET_LONGS ; j++) {
+		// fds_bits数组每个元素是long，即32个bit，i代表最大的文件描述符
 		i = j << 5;
+		// 超过了用户指定的大小
 		if (i >= n)
 			break;
+		// 逐个元素，即32位或
 		set = in->fds_bits[j] | out->fds_bits[j] | ex->fds_bits[j];
+		// i代表文件描述符，set>>=1即判断某个文件描述符是否需要监听
 		for ( ; set ; i++,set >>= 1) {
 			if (i >= n)
 				goto end_check;
+			// 如果该位没有被设置则结束当次循环，即不需要监听
 			if (!(set & 1))
 				continue;
+			// 判断文件描述符的有效性
 			if (!current->files->fd[i])
 				return -EBADF;
 			if (!current->files->fd[i]->f_inode)
 				return -EBADF;
+			// 记录最大的文件描述符
 			max = i;
 		}
 	}
 end_check:
+	// 用于下面的循环
 	n = max + 1;
 	if(!(entry = (struct select_table_entry*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
+	// 清0
 	FD_ZERO(res_in);
 	FD_ZERO(res_out);
 	FD_ZERO(res_ex);
@@ -122,9 +132,13 @@ end_check:
 	wait = &wait_table;
 repeat:
 	current->state = TASK_INTERRUPTIBLE;
+	// 遍历0到最大的文件描述符
 	for (i = 0 ; i < n ; i++) {
+		// 需要监听的话则检查是否满足条件
 		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->files->fd[i])) {
+			// 满足则设置该文件描述符
 			FD_SET(i, res_in);
+			// 满足条件的个数
 			count++;
 			wait = NULL;
 		}
@@ -140,6 +154,7 @@ repeat:
 		}
 	}
 	wait = NULL;
+	// 还没有满足条件的，并且没有超超时则挂起进程
 	if (!count && current->timeout && !(current->signal & ~current->blocked)) {
 		schedule();
 		goto repeat;
@@ -147,6 +162,7 @@ repeat:
 	free_wait(&wait_table);
 	free_page((unsigned long) entry);
 	current->state = TASK_RUNNING;
+	// 返回满足条件的个数
 	return count;
 }
 
