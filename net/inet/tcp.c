@@ -4283,6 +4283,7 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 		return;
 
 	/* tell the world about our new urgent pointer */
+	// 通知进程或组收到紧急数据
 	if (sk->proc != 0) {
 		if (sk->proc > 0) {
 			// 给进程发送一个SIGURG信号

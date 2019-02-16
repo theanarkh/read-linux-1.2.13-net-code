@@ -81,11 +81,11 @@ extern struct proto packet_prot;
 /*
  *	See if a socket number is in use.
  */
- 
+// 看socket的端口是否在使用 
 static int sk_inuse(struct proto *prot, int num)
 {
 	struct sock *sk;
-
+	// 根据端口号取得哈希链表中的一个链表
 	for(sk = prot->sock_array[num & (SOCK_ARRAY_SIZE -1 )];
 		sk != NULL;  sk=sk->next) 
 	{
@@ -99,7 +99,7 @@ static int sk_inuse(struct proto *prot, int num)
 /*
  *	Pick a new socket number
  */
-
+// 随机获取一个端口
 unsigned short get_new_socknum(struct proto *prot, unsigned short base)
 {
 	static int start=0;
@@ -113,7 +113,7 @@ unsigned short get_new_socknum(struct proto *prot, unsigned short base)
 	int best = 0;
 	int size = 32767; /* a big num. */
 	struct sock *sk;
-
+	// 大于1024
 	if (base == 0) 
 		base = PROT_SOCK+1+(start % 1024);
 	if (base <= PROT_SOCK) 
@@ -125,17 +125,27 @@ unsigned short get_new_socknum(struct proto *prot, unsigned short base)
 	for(i=0; i < SOCK_ARRAY_SIZE; i++) 
 	{
 		j = 0;
+		// 找到一条链表
 		sk = prot->sock_array[(i+base+1) &(SOCK_ARRAY_SIZE -1)];
+		// 找到链表中的最后一个节点
 		while(sk != NULL) 
 		{
 			sk = sk->next;
 			j++;
 		}
+		// 该链表上还没有节点，说明这个端口还没有被使用过，返回该端口号，更新start变量
 		if (j == 0) 
 		{
 			start =(i+1+start )%1024;
 			return(i+base+1);
 		}
+		/*
+			j为本次循环的队列的节点数，best记录新端口所属队列的索引，
+			size为本次循环为止节点数最少的队列的节点数，为了避免单个队列过长，
+			找可用端口的时候，不仅要找到一个可用的端口，而且尽量保证端口所对
+			应的队列不会过长，避免查找的时候比较慢，所以for循环是为了找出哈希链表
+			中节点数最少的队列对应的索引。然后往该队列插入一个新的端口节点
+		*/
 		if (j < size) 
 		{
 			best = i;
@@ -144,7 +154,7 @@ unsigned short get_new_socknum(struct proto *prot, unsigned short base)
 	}
 
 	/* Now make sure the one we want is not in use. */
-
+	// 在一条队列中找到一个未使用的端口号，SOCK_ARRAY_SIZE保证哈希后对应的是同一个队列
 	while(sk_inuse(prot, base +best+1)) 
 	{
 		best += SOCK_ARRAY_SIZE;
@@ -170,11 +180,12 @@ void put_sock(unsigned short num, struct sock *sk)
 	/* We can't have an interrupt re-enter here. */
 	save_flags(flags);
 	cli();
-
+	// 使用的socket数
 	sk->prot->inuse += 1;
+	// 最多使用的socket数
 	if (sk->prot->highestinuse < sk->prot->inuse)
 		sk->prot->highestinuse = sk->prot->inuse;
-
+	// 链表为空，sk成为第一个节点
 	if (sk->prot->sock_array[num] == NULL) 
 	{
 		sk->prot->sock_array[num] = sk;
@@ -182,6 +193,7 @@ void put_sock(unsigned short num, struct sock *sk)
 		return;
 	}
 	restore_flags(flags);
+	// mask为0xff000000 => 0xffff0000 => 0xffffff00 => 0xffffffff
 	for(mask = 0xff000000; mask != 0xffffffff; mask = (mask >> 8) | mask) 
 	{
 		if ((mask & sk->saddr) &&
@@ -192,6 +204,7 @@ void put_sock(unsigned short num, struct sock *sk)
 		}
 	}
 	cli();
+	// 根据端口找到对应的链表,找到对应的位置插入队列
 	sk1 = sk->prot->sock_array[num];
 	for(sk2 = sk1; sk2 != NULL; sk2=sk2->next) 
 	{
@@ -237,6 +250,7 @@ static void remove_sock(struct sock *sk1)
 	save_flags(flags);
 	cli();
 	sk2 = sk1->prot->sock_array[sk1->num &(SOCK_ARRAY_SIZE -1)];
+	// 是队列的第一个节点
 	if (sk2 == sk1) 
 	{
 		sk1->prot->inuse -= 1;
@@ -244,12 +258,12 @@ static void remove_sock(struct sock *sk1)
 		restore_flags(flags);
 		return;
 	}
-
+	// 找sk1
 	while(sk2 && sk2->next != sk1) 
 	{
 		sk2 = sk2->next;
 	}
-
+	// 找到
 	if (sk2) 
 	{
 		sk1->prot->inuse -= 1;
@@ -305,10 +319,12 @@ void destroy_sock(struct sock *sk)
 		 * This will take care of closing sockets that were
 		 * listening and didn't accept everything.
 		 */
+			// 处理listen型的socket，监听套接字接收队列里的skb关联的sock结构是一个新建的而不是sk
 			if (skb->sk != NULL && skb->sk != sk) 
 			{
 				IS_SKB(skb);
 				skb->sk->dead = 1;
+				// 关闭连接
 				skb->sk->prot->close(skb->sk, 0);
 			}
 			IS_SKB(skb);
@@ -318,6 +334,7 @@ void destroy_sock(struct sock *sk)
 
 	/* Now we need to clean up the send head. */
 	cli();
+	// 清空为了重传而缓存的数据包
 	for(skb = sk->send_head; skb != NULL; )
 	{
 		struct sk_buff *skb2;
@@ -332,6 +349,7 @@ void destroy_sock(struct sock *sk)
 			skb_unlink(skb);
 		}
 		skb->dev = NULL;
+		// unlink后link3指针仍然指向下一个skb节点
 		skb2 = skb->link3;
 		kfree_skb(skb, FREE_WRITE);
 		skb = skb2;
@@ -340,6 +358,7 @@ void destroy_sock(struct sock *sk)
 	sti();
 
   	/* And now the backlog. */
+	// 还没来得及移到receive_queue队列的而缓存在back_log队列的skb
   	while((skb=skb_dequeue(&sk->back_log))!=NULL) 
   	{
 		/* this should never happen. */
@@ -398,6 +417,7 @@ static int inet_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			 */
 			if (!suser() && current->pgrp != -arg &&
 				current->pid != arg) return(-EPERM);
+			// 设置进程或进程组号
 			sk->proc = arg;
 			return(0);
 		case F_GETOWN:
@@ -850,7 +870,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		return(-EIO);
 	if(addr_len<sizeof(struct sockaddr_in))
 		return -EINVAL;
-	// raw是链路层，不需要端口	
+	// raw协议的这些数据由用户填充	
 	if(sock->type != SOCK_RAW)
 	{	// 已经绑定了端口
 		if (sk->num != 0) 
@@ -1433,11 +1453,13 @@ struct sock *get_sock(struct proto *prot, unsigned short num,
 			score++;
 		}
 		/* perfect match? */
+		// 全匹配，直接返回
 		if (score == 3)
 			return s;
 		/* no, check if this is the best so far.. */
 		if (score <= badness)
 			continue;
+		// 记录最好的匹配项
 		result = s;
 		badness = score;
   	}

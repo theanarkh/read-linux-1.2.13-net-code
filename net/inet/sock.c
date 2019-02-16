@@ -147,6 +147,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			sk->broadcast=val?1:0;
 			return 0;
 		case SO_SNDBUF:
+			// 设置发送缓冲区大小
 			if(val>32767)
 				val=32767;
 			if(val<256)
@@ -161,33 +162,34 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			if(ling.l_onoff==0)
 				sk->linger=0;
 			else
-			{
+			{	// 需要等待固定时间后才断开连接
 				sk->lingertime=ling.l_linger;
 				sk->linger=1;
 			}
 			return 0;
 		case SO_RCVBUF:
+			// 设置接收缓冲区大小
 			if(val>32767)
 				val=32767;
 			if(val<256)
 				val=256;
 			sk->rcvbuf=val;
 			return(0);
-
+		// 设置端口、地址可以重用
 		case SO_REUSEADDR:
 			if (val) 
 				sk->reuse = 1;
 			else 
 				sk->reuse = 0;
 			return(0);
-
+		// 保持连接
 		case SO_KEEPALIVE:
 			if (val)
 				sk->keepopen = 1;
 			else 
 				sk->keepopen = 0;
 			return(0);
-
+		// 紧急数据当普通数据处理
 	 	case SO_OOBINLINE:
 			if (val) 
 				sk->urginline = 1;
@@ -201,7 +203,7 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 			else 
 				sk->no_check = 0;
 			return(0);
-
+		// 设置数据发送时在mac层队列的优先级
 		 case SO_PRIORITY:
 			if (val >= 0 && val < DEV_NUMBUFFS) 
 			{

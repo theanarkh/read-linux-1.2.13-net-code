@@ -262,8 +262,9 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	/* 
 	 *	Allocate an sk_buff copy of the packet.
 	 */
-	 
+	// 协议头最大长度+数据长度
 	size = sk->prot->max_header + len;
+	// 在写缓冲区申请一个skb
 	skb = sock_alloc_send_skb(sk, size, 0, &tmp);
 
 
@@ -271,6 +272,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 		return tmp;
 
 	skb->sk       = NULL;	/* to avoid changing sk->saddr */
+	// 发送完可以销毁，不需要缓存
 	skb->free     = 1;
 	skb->localroute = sk->localroute|(rt&MSG_DONTROUTE);
 
@@ -286,6 +288,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	if (MULTICAST(sin->sin_addr.s_addr))
 		ttl = sk->ip_mc_ttl;
 #endif
+	// 构建ip和mac头
 	tmp = sk->prot->build_header(skb, saddr, sin->sin_addr.s_addr,
 			&dev, IPPROTO_UDP, sk->opt, skb->mem_len,sk->ip_tos,ttl);
 
@@ -303,6 +306,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
   	
 	buff += tmp;
 	saddr = skb->saddr; /*dev->pa_addr;*/
+	// 全部协议头+数据的长度
 	skb->len = tmp + sizeof(struct udphdr) + len;	/* len + UDP + IP + MAC */
 	skb->dev = dev;
 	
@@ -311,9 +315,11 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	 */
 	 
 	uh = (struct udphdr *) buff;
+	// 设置udp头各字段
 	uh->len = htons(len + sizeof(struct udphdr));
 	uh->source = sk->dummy_th.source;
 	uh->dest = sin->sin_port;
+	// 写入数据的首地址
 	buff = (unsigned char *) (uh + 1);
 
 	/*
@@ -325,7 +331,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
   	/*
   	 *	Set up the UDP checksum. 
   	 */
-  	 
+	// 计算校验和
 	udp_send_check(uh, saddr, sin->sin_addr.s_addr, skb->len - tmp, sk);
 
 	/* 
@@ -333,7 +339,7 @@ static int udp_send(struct sock *sk, struct sockaddr_in *sin,
 	 */
 	 
 	udp_statistics.UdpOutDatagrams++;
-	 
+	// 下发到ip层	 
 	sk->prot->queue_xmit(sk, dev, skb, 1);
 	return(len);
 }
@@ -353,7 +359,7 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 	/*
 	 *	Get and verify the address. 
 	 */
-	 
+	// 目的地址信息
 	if (usin) 
 	{
 		if (addr_len < sizeof(sin)) 
@@ -365,9 +371,11 @@ static int udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock
 			return(-EINVAL);
 	} 
 	else 
-	{
+	{	
+		// 没传目的信息又没有建立起连接，即没有调connect函数，则无法知道数据包应该发送给谁
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
+		// 从之前建立连接中获取目的信息
 		sin.sin_family = AF_INET;
 		sin.sin_port = sk->dummy_th.dest;
 		sin.sin_addr.s_addr = sk->daddr;
@@ -500,6 +508,7 @@ int udp_recvfrom(struct sock *sk, unsigned char *to, int len,
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
+	// 复制源地址信息给应用层
 	if (sin) 
 	{
 		sin->sin_family = AF_INET;
@@ -522,7 +531,7 @@ int udp_read(struct sock *sk, unsigned char *buff, int len, int noblock,
 	return(udp_recvfrom(sk, buff, len, noblock, flags, NULL, NULL));
 }
 
-
+// udp不是面向连接的，connect函数主要是根据目的ip，从路由表找到目的地址的信息然后保存在sk中，并修改态为以已连接
 int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
 	struct rtable *rt;
@@ -596,7 +605,7 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
-
+	// 检查检验和
 	if (uh->check && udp_check(uh, len, saddr, daddr)) 
 	{
 		/* <mea@utu.fi> wants to know, who sent it, to
@@ -644,10 +653,12 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		return 0;
 	}	
 #endif
+	// 获取对应socket
   	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
 	if (sk == NULL) 
   	{
   		udp_statistics.UdpNoPorts++;
+		// 没有对应的socket
 		if (addr_type == IS_MYADDR) 
 		{
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);
@@ -683,7 +694,7 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
 	 */
 
 	skb->len = len - sizeof(*uh);  
-	 
+	// 把skb挂载到sk接收队列
 	if (sock_queue_rcv_skb(sk,skb)<0) 
 	{
 		udp_statistics.UdpInErrors++;
