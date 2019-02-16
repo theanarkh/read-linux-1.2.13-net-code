@@ -1284,11 +1284,14 @@ static struct notifier_block arp_dev_notifier={
 void arp_init (void)
 {
 	/* Register the packet type */
+	// 注册到mac层的arp_packet_type链表，mac层接收到数据包时遍历该链表进行数据的分发
 	arp_packet_type.type=htons(ETH_P_ARP);
 	dev_add_pack(&arp_packet_type);
 	/* Start with the regular checks for expired arp entries. */
+	// 定时检查arp缓存是否过期
 	add_timer(&arp_timer);
 	/* Register for device down reports */
+	// 监听mac头设备的状态,状态变化执行对应的回调
 	register_netdevice_notifier(&arp_dev_notifier);
 }
 

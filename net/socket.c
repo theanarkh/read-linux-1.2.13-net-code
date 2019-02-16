@@ -1391,7 +1391,10 @@ void sock_init(void)
 	/*
 	 *	And the bottom half handler 
 	 */
-
+	/*
+		网络数据包到达时会触发系统中断，中断处理函数只是构造一个skb挂载到mac头的backlog队列，
+		然后中断处理结束，在下半部分的时候再处理这个数据包，处理函数即net_bh
+	*/
 	bh_base[NET_BH].routine= net_bh;
 	enable_bh(NET_BH);
 #endif  

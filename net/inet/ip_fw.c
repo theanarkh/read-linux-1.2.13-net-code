@@ -108,13 +108,19 @@ struct ip_fw *ip_acct_chain;
 /*
  *	Returns 1 if the port is matched by the vector, 0 otherwise
  */
-
+/*
+portptr端口数组
+nports数组长度
+port要匹配的端口
+range_flag是否需要判断范围匹配
+*/
 extern inline int port_match(unsigned short *portptr,int nports,unsigned short port,int range_flag)
 {
 	if (!nports)
 		return 1;
+	// 范围匹配
 	if ( range_flag ) 
-	{
+	{	// 在某个范围内则返回匹配
 		if ( portptr[0] <= port && port <= portptr[1] ) 
 		{
 			return( 1 );
@@ -394,7 +400,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	return 0;
 }
 
-
+// 清除每个节点中记录包和字节数量的字段
 static void zero_fw_chain(struct ip_fw *chainptr)
 {
 	struct ip_fw *ctmp=chainptr;
@@ -406,6 +412,7 @@ static void zero_fw_chain(struct ip_fw *chainptr)
 	}
 }
 
+// 删除全部节点
 static void free_fw_chain(struct ip_fw *volatile* chainptr)
 {
 	unsigned long flags;
@@ -414,8 +421,11 @@ static void free_fw_chain(struct ip_fw *volatile* chainptr)
 	while ( *chainptr != NULL ) 
 	{
 		struct ip_fw *ftmp;
+		// 头节点的地址
 		ftmp = *chainptr;
+		// 头指针指向头结点的下一个节点
 		*chainptr = ftmp->fw_next;
+		// 是否头结点的内存
 		kfree_s(ftmp,sizeof(*ftmp));
 	}
 	restore_flags(flags);

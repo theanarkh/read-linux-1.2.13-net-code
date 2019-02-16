@@ -288,6 +288,7 @@ el1_probe1(struct device *dev, int ioaddr)
 
     /* The EL1-specific entries in the device structure. */
     dev->open = &el_open;
+	// 发送函数
     dev->hard_start_xmit = &el_start_xmit;
     dev->stop = &el1_close;
     dev->get_stats = &el1_get_stats;
@@ -307,7 +308,7 @@ el_open(struct device *dev)
 
     if (el_debug > 2)
 	printk("%s: Doing el_open()...", dev->name);
-
+	// 设置中断的回调是el_interrupt函数，网络收到数据包后会触发系统中断，系统会执行该函数
     if (request_irq(dev->irq, &el_interrupt, 0, "3c501")) {
 	return -EAGAIN;
     }
@@ -384,6 +385,7 @@ el_start_xmit(struct sk_buff *skb, struct device *dev)
 	restore_flags(flags);
 	outw(0x00, RX_BUF_CLR);		/* Set rx packet area to 0. */
 	outw(gp_start, GP_LOW);		/* aim - packet will be loaded into buffer start */
+	// 传输数据到网卡
 	outsb(DATAPORT,buf,skb->len);	/* load buffer (usual thing each byte increments the pointer) */
 	outw(gp_start, GP_LOW);		/* the board reuses the same register */
 	outb(AX_XMIT, AX_CMD);		/* fire ... Trigger xmit.  */
@@ -502,6 +504,7 @@ el_interrupt(int irq, struct pt_regs *regs)
 	/*
 	 *	Receive worked.
 	 */
+		// 成功收到数据包后执行到这
 	    el_receive(dev);
 	} else {			/* Nothing?  Something is broken! */
 	    if (el_debug > 2)
@@ -534,12 +537,12 @@ el_receive(struct device *dev)
     int ioaddr = dev->base_addr;
     int pkt_len;
     struct sk_buff *skb;
-
+	// 包长度
     pkt_len = inw(RX_LOW);
 
     if (el_debug > 4)
       printk(" el_receive %d.\n", pkt_len);
-
+	// 包太大或太小
     if ((pkt_len < 60)  ||  (pkt_len > 1536)) {
 	if (el_debug)
 	  printk("%s: bogus packet, length=%d\n", dev->name, pkt_len);
@@ -552,7 +555,7 @@ el_receive(struct device *dev)
      */
      
     outb(AX_SYS, AX_CMD);
-
+	// 分配一个承载数据的skb
     skb = alloc_skb(pkt_len, GFP_ATOMIC);
     /*
      *	Start of frame
@@ -563,6 +566,7 @@ el_receive(struct device *dev)
 	lp->stats.rx_dropped++;
 	return;
     } else {
+	// 记录数据包长度和收到该包的设备
 	skb->len = pkt_len;
 	skb->dev = dev;
 
@@ -571,9 +575,9 @@ el_receive(struct device *dev)
 	 *	handler will fix the pointer when it returns to 
 	 *	receive mode.
 	 */
-	 
+	// 读取数据到skb中 
 	insb(DATAPORT, skb->data, pkt_len);
-
+	// 传给mac层
 	netif_rx(skb);
 	lp->stats.rx_packets++;
     }

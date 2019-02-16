@@ -123,7 +123,7 @@ static int dev_nit=0;
  *	smarter we can dispense with all the messy stuff that used to be
  *	here.
  */
- 
+// 新增一个节点到链表，该链表用于管理上层协议
 void dev_add_pack(struct packet_type *pt)
 {
 	if(pt->type==htons(ETH_P_ALL))
@@ -348,10 +348,11 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 *	queue front as a retransmit attempt. It therefore goes back on the queue
 	 *	start on a failure.
 	 */
-	 
+	// 类似坐标轴，-1和1是对称的，如果传的是负数，则先取他的对边，因为数组是从0开始，需要减一，比如传2即数组下标是1
   	if (pri < 0) 
   	{
 		pri = -pri-1;
+		// 是直接发送还是先缓存到发送队列，1说明直接发送,0说明当前的skb先入队尾，先发送队列的队头节点
 		where = 1;
   	}
 
@@ -365,17 +366,26 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	 *	If the address has not been resolved. Call the device header rebuilder.
 	 *	This can cover all protocols and technically not just ARP either.
 	 */
-	 
+	/*
+		还没有完成arp解析，重新构建mac头，如果当前arp解析还没成功则直接返回，
+		等待解析完成重新执行该函数(arp_rcv->arp_send_q).
+	*/
 	if (!skb->arp && dev->rebuild_header(skb->data, dev, skb->raddr, skb)) {
 		return;
 	}
 
 	save_flags(flags);
 	cli();	
+	/*
+		1 where一般是0，即pri是正整数，这时候skb会先插入队尾，先发送队头的节点，
+		并且把数据包复制一份给对数据包感兴趣的协议，然后发送。
+		2 where等于1，即pri是负数代表这个skb是发送失败后重发的，这时候这个数据包时直接发送出去的，不再走1的那些流程
+	*/
 	if (!where) {
 #ifdef CONFIG_SLAVE_BALANCING	
 		skb->in_dev_queue=1;
 #endif		
+		// 插入队尾，取出队头节点发送
 		skb_queue_tail(dev->buffs + pri,skb);
 		skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
 		skb = skb_dequeue(dev->buffs + pri);
@@ -388,12 +398,14 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 	/* copy outgoing packets to any sniffer packet handlers */
 	if(!where)
-	{
+	{	
+		// 把所有发出去的数据包传一份给其他协议
 		for (nitcount= dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) 
 		{
 			/* Never send packets back to the socket
 			 * they originated from - MvS (miquels@drinkel.ow.org)
 			 */
+			// 对所有包都感兴趣的、不是packet协议产生的packet_type节点
 			if (ptype->type == htons(ETH_P_ALL) &&
 			   (ptype->dev == dev || !ptype->dev) &&
 			   ((struct sock *)ptype->data != skb->sk))
@@ -412,6 +424,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 		}
 	}
 	start_bh_atomic();
+	// 调用驱动层发送
 	if (dev->hard_start_xmit(skb, dev) == 0) {
 		end_bh_atomic();
 		/*
@@ -431,6 +444,7 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	dev->pkt_queue++;
 #endif		
 	skb_device_unlock(skb);
+	// 发送失败则把数据包重新加入队列
 	skb_queue_head(dev->buffs + pri,skb);
 	restore_flags(flags);
 }
@@ -458,12 +472,12 @@ void netif_rx(struct sk_buff *skb)
 	/*
 	 *	Check that we aren't overdoing things.
 	 */
-
+	// 是否过载
 	if (!backlog_size)
   		dropping = 0;
 	else if (backlog_size > 300)
 		dropping = 1;
-
+	// 过载则丢弃
 	if (dropping) 
 	{
 		kfree_skb(skb, FREE_READ);
@@ -476,6 +490,7 @@ void netif_rx(struct sk_buff *skb)
 #ifdef CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif	
+	// 加到backlog队列
 	skb_queue_tail(&backlog,skb);
 	backlog_size++;
   
@@ -483,7 +498,7 @@ void netif_rx(struct sk_buff *skb)
 	 *	If any packet arrived, mark it for processing after the
 	 *	hardware interrupt returns.
 	 */
-
+	// 激活下半部分，处理数据包
 	mark_bh(NET_BH);
 	return;
 }
@@ -579,7 +594,7 @@ int dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
 /*
  *	This routine causes all interfaces to try to send some data. 
  */
- 
+// 发送各个设备中的数据出去 
 void dev_transmit(void)
 {
 	struct device *dev;
@@ -633,7 +648,7 @@ void net_bh(void *tmp)
 	/*
 	 *	Atomically check and mark our BUSY state. 
 	 */
-
+	// 防止重入
 	if (set_bit(1, (void*)&in_bh))
 		return;
 
@@ -642,7 +657,7 @@ void net_bh(void *tmp)
 	 *	decks for any more sends that get done as we
 	 *	process the input.
 	 */
-
+	// 发送缓存的数据包
 	dev_transmit();
   
 	/*
@@ -656,7 +671,7 @@ void net_bh(void *tmp)
 	/*
 	 *	While the queue is not empty
 	 */
-	 
+	// backlog队列的数据包来源于网卡收到的数据包	 
 	while((skb=skb_dequeue(&backlog))!=NULL)
 	{
 		/*
@@ -672,8 +687,9 @@ void net_bh(void *tmp)
 		*	the MAC header, if any (as indicated by its "length"
 		*	field).  Take care now!
 		*/
-
+		// 指向ip头
 		skb->h.raw = skb->data + skb->dev->hard_header_len;
+		// 减去mac头长度
 		skb->len -= skb->dev->hard_header_len;
 
 	       /*
@@ -686,7 +702,7 @@ void net_bh(void *tmp)
 		*	clash (eg ETH_P_AX25). We could set this before we queue the
 		*	frame. In fact I may change this when I have time.
 		*/
-		
+		// 判断上层协议
 		type = skb->dev->type_trans(skb, skb->dev);
 
 		/*
@@ -709,6 +725,7 @@ void net_bh(void *tmp)
 				 *	We already have a match queued. Deliver
 				 *	to it and then remember the new match
 				 */
+				// 如果有匹配的项则要单独复制一份skb
 				if(pt_prev)
 				{
 					struct sk_buff *skb2;
@@ -724,6 +741,7 @@ void net_bh(void *tmp)
 						pt_prev->func(skb2, skb->dev, pt_prev);
 				}
 				/* Remember the current last to do */
+				// 记录最近匹配的项
 				pt_prev=ptype;
 			}
 		} /* End of protocol list loop */
@@ -731,7 +749,7 @@ void net_bh(void *tmp)
 		/*
 		 *	Is there a last item to send to ?
 		 */
-
+		// 把数据包交给上层协议处理，大于一个匹配项，则把skb复制给最后一项，否则销毁skb
 		if(pt_prev)
 			pt_prev->func(skb, skb->dev, pt_prev);
 		/*
@@ -754,7 +772,7 @@ void net_bh(void *tmp)
   	/*
   	 *	We have emptied the queue
   	 */
-  	 
+  	// 处理完毕 
   	in_bh = 0;
 	sti();
 	
@@ -781,7 +799,7 @@ void dev_tint(struct device *dev)
 	/*
 	 *	Work the queues in priority order
 	 */
-	 
+	// 传输某个设备中DEV_NUMBUFFS个队列中的数据包 
 	for(i = 0;i < DEV_NUMBUFFS; i++) 
 	{
 		/*
@@ -805,6 +823,7 @@ void dev_tint(struct device *dev)
 			/*
 			 *	If we can take no more then stop here.
 			 */
+			// 忙则一会再发送
 			if (dev->tbusy)
 				return;
 			cli();

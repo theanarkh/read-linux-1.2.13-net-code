@@ -61,7 +61,7 @@ static inline unsigned long min(unsigned long a, unsigned long b)
 	return(b);
 }
 
-
+// 没用到
 /* raw_err gets called by the icmp module. */
 void raw_err (int err, unsigned char *header, unsigned long daddr,
 	 unsigned long saddr, struct inet_protocol *protocol)
@@ -93,19 +93,21 @@ void raw_err (int err, unsigned char *header, unsigned long daddr,
  *	copy it into a buffer. All demultiplexing is done
  *	in ip.c
  */
-
+// ip层有数据到达时调用该函数，该函数把数据缓存到sk的接收队列，等待应用层使用
 int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, long saddr, long daddr)
 {
 	/* Now we need to copy this into memory. */
 	skb->sk = sk;
+	// ip头+数据部分的长度
 	skb->len = ntohs(skb->ip_hdr->tot_len);
 	skb->h.raw = (unsigned char *) skb->ip_hdr;
 	skb->dev = dev;
+	// daddr和saddr是ip头中的字段
 	skb->saddr = daddr;
 	skb->daddr = saddr;
 
 	/* Charge it to the socket. */
-	
+	// 挂载到sk的接收队列	
 	if(sock_queue_rcv_skb(sk,skb)<0)
 	{
 		ip_statistics.IpInDiscards++;
@@ -138,18 +140,19 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 
 	if (flags & MSG_OOB)		/* Mirror BSD error message compatibility */
 		return -EOPNOTSUPP;
-			 
+	// 只支持MSG_DONTROUTE		 
 	if (flags & ~MSG_DONTROUTE)
 		return(-EINVAL);
 	/*
 	 *	Get and verify the address. 
 	 */
-
+	// 传了地址
 	if (usin) 
 	{
 		if (addr_len < sizeof(sin)) 
 			return(-EINVAL);
 		memcpy(&sin, usin, sizeof(sin));
+		// 只支持AF_INET协议簇
 		if (sin.sin_family && sin.sin_family != AF_INET) 
 			return(-EINVAL);
 	}
@@ -169,15 +172,16 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 
 	if (sk->broadcast == 0 && ip_chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;
-
+	// 在socket的写缓冲区申请一个skb
 	skb=sock_alloc_send_skb(sk, len+sk->prot->max_header, noblock, &err);
 	if(skb==NULL)
 		return err;
 		
 	skb->sk = sk;
+	// 发送完可以释放掉，不需要重传
 	skb->free = 1;
 	skb->localroute = sk->localroute | (flags&MSG_DONTROUTE);
-
+	// 构造mac头，ip头由用户构建，即from中应该包括ip头
 	tmp = sk->prot->build_header(skb, sk->saddr, 
 			       sin.sin_addr.s_addr, &dev,
 			       sk->protocol, sk->opt, skb->mem_len, sk->ip_tos,sk->ip_ttl);
@@ -187,7 +191,7 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 		release_sock(sk);
 		return(tmp);
 	}
-
+	// 把用户传进来的ip头和数据复制到skb中
 	memcpy_fromfs(skb->data + tmp, from, len);
 
 	/*
@@ -199,16 +203,17 @@ static int raw_sendto(struct sock *sk, unsigned char *from,
 	{
 		unsigned char *buff;
 		struct iphdr *iph;
-
+		// 指向ip头
 		buff = skb->data;
 		buff += tmp;
 
 		iph = (struct iphdr *)buff;
+		// 写源ip字段
 		iph->saddr = sk->saddr;
 	}
-
+	// 更新skb的数据长度，即mac头长度+用户传进来的数据长度（ip+数据）
 	skb->len = tmp + len;
-  
+	// 发送
 	sk->prot->queue_xmit(sk, dev, skb, 1);
 	release_sock(sk);
 	return(len);
@@ -256,18 +261,19 @@ int raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 
 	if (addr_len) 
 		*addr_len=sizeof(*sin);
-
+	// 从sk的接收队列中获取skb
 	skb=skb_recv_datagram(sk,flags,noblock,&err);
 	if(skb==NULL)
  		return err;
 
 	truesize=skb->len;
 	copied = min(len, truesize);
-  
+	// 把数据复制到用户空间，大小取决于用户传进来的数据大小和数据的大小
 	skb_copy_datagram(skb, 0, to, copied);
 	sk->stamp=skb->stamp;
 
 	/* Copy the address. */
+	// 复制地址到用户空间
 	if (sin) 
 	{
 		sin->sin_family = AF_INET;

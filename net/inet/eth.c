@@ -169,7 +169,7 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb->data;
 	unsigned char *rawp;
-	
+	// 最高位是1说明是多播或广播，是0则是单播	
 	if(*eth->h_dest&1)
 	{
 		if(memcmp(eth->h_dest,dev->broadcast, ETH_ALEN)==0)
@@ -177,13 +177,13 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 		else
 			skb->pkt_type=PACKET_MULTICAST;
 	}
-	
+	// 工作方式是混杂模式	
 	if(dev->flags&IFF_PROMISC)
 	{
 		if(memcmp(eth->h_dest,dev->dev_addr, ETH_ALEN))
 			skb->pkt_type=PACKET_OTHERHOST;
 	}
-	
+	// 大于1536则直接返回，ip和arp协议都是
 	if (ntohs(eth->h_proto) >= 1536)
 		return eth->h_proto;
 		

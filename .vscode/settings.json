@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "sched.h": "c"
+        "sched.h": "c",
+        "netdevice.h": "c"
     }
 }

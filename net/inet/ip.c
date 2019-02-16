@@ -1620,16 +1620,16 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 *	Remember if the frame is fragmented.
 	 */
-	
+	// 非0则说明是分片	
 	if(iph->frag_off)
 	{	
-		
+		// 是否禁止分片，是的话is_frag等于1
 		if (iph->frag_off & 0x0020)
 			is_frag|=1;
 		/*
 		 *	Last fragment ?
 		 */
-		
+		// 非0说明有偏移，即不是第一个块分片
 		if (ntohs(iph->frag_off) & 0x1fff)
 			is_frag|=2;
 	}
@@ -1711,7 +1711,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 * Reassemble IP fragments.
  	 */
-
+	// 分片重组 
 	if(is_frag)
 	{
 		/* Defragment. Obtain the complete packet if there is one */
@@ -1729,6 +1729,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 	skb->ip_hdr = iph;
+	// 往上层传之前先指向上层的头
 	skb->h.raw += iph->ihl*4;
 	
 	/*
@@ -1742,19 +1743,23 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	{
 		struct sock *sknext=NULL;
 		struct sk_buff *skb1;
+		// 找对应的socket
 		raw_sk=get_sock_raw(raw_sk, hash,  iph->saddr, iph->daddr);
 		if(raw_sk)	/* Any raw sockets */
 		{
 			do
 			{
 				/* Find the next */
+				// 从队列中raw_sk的下一个节点开始找满足条件的socket，因为之前的的肯定不满足条件了
 				sknext=get_sock_raw(raw_sk->next, hash, iph->saddr, iph->daddr);
+				// 复制一份skb给符合条件的socket
 				if(sknext)
 					skb1=skb_clone(skb, GFP_ATOMIC);
 				else
 					break;	/* One pending raw socket left */
 				if(skb1)
 					raw_rcv(raw_sk, skb1, dev, iph->saddr,iph->daddr);
+				// 记录最近符合条件的socket
 				raw_sk=sknext;
 			}
 			while(raw_sk!=NULL);
@@ -1766,8 +1771,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 *	skb->h.raw now points at the protocol beyond the IP header.
 	 */
-
+	// 传给ip层的上传协议
 	hash = iph->protocol & (MAX_INET_PROTOS -1);
+	// 获取哈希链表中的一个队列，遍历
 	for (ipprot = (struct inet_protocol *)inet_protos[hash];ipprot != NULL;ipprot=(struct inet_protocol *)ipprot->next)
 	{
 		struct sk_buff *skb2;
@@ -1779,7 +1785,11 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	* 	only be set if more than one protocol wants it.
 	* 	and then not for the last one. If there is a pending
 	*	raw delivery wait for that
-	*/
+	*/	
+		/*
+			是否需要复制一份skb，copy字段这个版本中都是0，有多个一样的协议才需要复制一份，
+			否则一份就够，因为只有一个协议需要使用，raw_sk的值是上面代码决定的
+		*/
 		if (ipprot->copy || raw_sk)
 		{
 			skb2 = skb_clone(skb, GFP_ATOMIC);
@@ -1790,6 +1800,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		{
 			skb2 = skb;
 		}
+		// 找到了处理该数据包的上层协议
 		flag = 1;
 
 	       /*
@@ -1812,8 +1823,10 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 	if(raw_sk!=NULL)	/* Shift to last raw user */
 		raw_rcv(raw_sk, skb, dev, iph->saddr, iph->daddr);
+	// 没找到处理该数据包的上层协议，报告错误
 	else if (!flag)		/* Free and report errors */
-	{
+	{	
+		// 不是广播不是多播,发送目的地不可达的icmp包
 		if (brd != IS_BROADCAST && brd!=IS_MULTICAST)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0, dev);
 		kfree_skb(skb, FREE_WRITE);
@@ -1945,7 +1958,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	/*
 	 *	Add an IP checksum
 	 */
-
+	// ip层校验和
 	ip_send_check(iph);
 
 	/*
@@ -1968,12 +1981,12 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	in the TCP level since nobody else uses it. BUT
 	 *	remember IPng might change all the rules.
 	 */
-
+	// free等于0说明这个包要缓存
 	if (!free)
 	{
 		unsigned long flags;
 		/* The socket now has more outstanding blocks */
-
+		// 发送但还没收到确认的数据包数量
 		sk->packets_out++;
 
 		/* Protect the list for a moment */
@@ -1985,6 +1998,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 			printk("ip.c: link3 != NULL\n");
 			skb->link3 = NULL;
 		}
+		// 插入已发送但未确认队列，用于超时重传
 		if (sk->send_head == NULL)
 		{
 			sk->send_tail = skb;

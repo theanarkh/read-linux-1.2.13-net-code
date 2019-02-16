@@ -67,7 +67,7 @@ static unsigned long min(unsigned long a, unsigned long b)
 /*
  *	This should be the easiest of all, all we do is copy it into a buffer. 
  */
- 
+// mac头接收到数据包时调用该函数 
 int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 {
 	struct sock *sk;
@@ -77,7 +77,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	 *	When we registered the protocol we saved the socket in the data
 	 *	field for just this event.
 	 */
-
+	// 见packet_init函数
 	sk = (struct sock *) pt->data;	
 
 	/*
@@ -87,18 +87,19 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	 */
 	 
 	skb->dev = dev;
+	// 加上mac头的长度
 	skb->len += dev->hard_header_len;
 
 	/*
 	 *	Charge the memory to the socket. This is done specifically
 	 *	to prevent sockets using all the memory up.
 	 */
-	 
+	// 接收缓冲区过大 
 	if (sk->rmem_alloc & 0xFF000000) {
 		printk("packet_rcv: sk->rmem_alloc = %ld\n", sk->rmem_alloc);
 		sk->rmem_alloc = 0;
 	}
-
+	// 读缓冲区满则丢包
 	if (sk->rmem_alloc + skb->mem_len >= sk->rcvbuf) 
 	{
 /*	        printk("packet_rcv: drop, %d+%d>%d\n", sk->rmem_alloc, skb->mem_len, sk->rcvbuf); */
@@ -111,12 +112,13 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	cli();
 
 	skb->sk = sk;
+	// 读缓冲区变小
 	sk->rmem_alloc += skb->mem_len;	
 
 	/*
 	 *	Queue the packet up, and wake anyone waiting for it.
 	 */
-
+	// 挂载到socket的接收队列
 	skb_queue_tail(&sk->receive_queue,skb);
 	if(!sk->dead)
 		sk->data_ready(sk,skb->len);
@@ -136,7 +138,7 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
  *	Output a raw packet to a device layer. This bypasses all the other
  *	protocol layers and you must therefore supply it with a complete frame
  */
- 
+// 用户提供mac头和数据 
 static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	      int noblock, unsigned flags, struct sockaddr_in *usin,
 	      int addr_len)
@@ -179,10 +181,10 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	 *	You may not queue a frame bigger than the mtu. This is the lowest level
 	 *	raw protocol and you must do your own fragmentation at this level.
 	 */
-	 
+	// mac头和数据的大小	 
 	if(len>dev->mtu+dev->hard_header_len)
   		return -EMSGSIZE;
-
+	// 分配一个skb，消耗写缓冲区大小
 	skb = sk->prot->wmalloc(sk, len, 0, GFP_KERNEL);
 
 	/*
@@ -200,7 +202,9 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	 */
 	 
 	skb->sk = sk;
+	// 不需要缓存
 	skb->free = 1;
+	// 所有内容都由用户填充
 	memcpy_fromfs(skb->data, from, len);
 	skb->len = len;
 	skb->arp = 1;		/* No ARP needs doing on this (complete) frame */
@@ -208,7 +212,7 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	/*
 	 *	Now send it
 	 */
-
+	// 设备在运行则发送，否则销毁skb
 	if (dev->flags & IFF_UP) 
 		dev_queue_xmit(skb, dev, sk->priority);
 	else
@@ -220,7 +224,7 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
  *	A write to a SOCK_PACKET can't actually do anything useful and will
  *	always fail but we include it for completeness and future expansion.
  */
-
+// 该版本没用
 static int packet_write(struct sock *sk, unsigned char *buff, 
 	     int len, int noblock,  unsigned flags)
 {
@@ -238,7 +242,9 @@ static void packet_close(struct sock *sk, int timeout)
 {
 	sk->inuse = 1;
 	sk->state = TCP_CLOSE;
+	// 从链表中删除该socket
 	dev_remove_pack((struct packet_type *)sk->pair);
+	// 销毁packet_type结构
 	kfree_s((void *)sk->pair, sizeof(struct packet_type));
 	sk->pair = NULL;
 	release_sock(sk);
@@ -259,8 +265,9 @@ static int packet_init(struct sock *sk)
 	p = (struct packet_type *) kmalloc(sizeof(*p), GFP_KERNEL);
 	if (p == NULL) 
 		return(-ENOMEM);
-
+	// 设置接收函数
 	p->func = packet_rcv;
+	// num是用户传进来的protocol
 	p->type = sk->num;
 	p->data = (void *)sk;
 	p->dev = NULL;
@@ -269,7 +276,7 @@ static int packet_init(struct sock *sk)
 	/*
 	 *	We need to remember this somewhere. 
 	 */
-   
+    // pcket_type和sock结构体互相关联，方便互找
 	sk->pair = (struct sock *)p;
 
 	return(0);
@@ -309,7 +316,7 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 *	of horrible races and re-entrancy so we can forget about it
 	 *	in the protocol layers.
 	 */
-	 
+	
 	skb=skb_recv_datagram(sk,flags,noblock,&err);
 	
 	/*
@@ -325,10 +332,10 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	 *	You lose any data beyond the buffer you gave. If it worries a
 	 *	user program they can ask the device for its MTU anyway.
 	 */
-	 
+	// mac头+数据的大小	 
 	truesize = skb->len;
 	copied = min(len, truesize);
-
+	// 复制到用户空间
 	memcpy_tofs(to, skb->data, copied);	/* We can't use skb_copy_datagram here */
 
 	/*

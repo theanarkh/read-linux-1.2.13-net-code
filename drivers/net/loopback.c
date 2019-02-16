@@ -94,13 +94,17 @@ loopback_init(struct device *dev)
 
   dev->mtu		= 2000;			/* MTU			*/
   dev->tbusy		= 0;
+  // 发送函数
   dev->hard_start_xmit	= loopback_xmit;
   dev->open		= NULL;
 #if 1
   dev->hard_header	= eth_header;
+  // mac头长度
   dev->hard_header_len	= ETH_HLEN;		/* 14			*/
+  // 地址长度
   dev->addr_len		= ETH_ALEN;		/* 6			*/
   dev->type		= ARPHRD_ETHER;		/* 0x0001		*/
+  // 判断上传协议的函数
   dev->type_trans	= eth_type_trans;
   dev->rebuild_header	= eth_rebuild_header;
   dev->open		= loopback_open;
@@ -127,6 +131,7 @@ loopback_init(struct device *dev)
   dev->get_stats = get_stats;
 
   /* Fill in the generic fields of the device structure. */
+  // 初始化发送队列
   for (i = 0; i < DEV_NUMBUFFS; i++)
 	skb_queue_head_init(&dev->buffs[i]);
   

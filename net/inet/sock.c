@@ -509,13 +509,16 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int nob
 int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	unsigned long flags;
+	// 接收缓冲区已满
 	if(sk->rmem_alloc + skb->mem_len >= sk->rcvbuf)
 		return -ENOMEM;
 	save_flags(flags);
 	cli();
+	// 更新接收缓冲区大小
 	sk->rmem_alloc+=skb->mem_len;
 	skb->sk=sk;
 	restore_flags(flags);
+	// 挂载到socket的接收队列
 	skb_queue_tail(&sk->receive_queue,skb);
 	if(!sk->dead)
 		sk->data_ready(sk,skb->len);

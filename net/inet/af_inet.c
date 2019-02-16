@@ -578,6 +578,7 @@ static int inet_create(struct socket *sock, int protocol)
 						 * Doesn't matter no checksum is
 						 * performed anyway.
 						 */
+			// mac头收到数据包时对应数据包的协议是否等于protocol
 			sk->num = protocol;
 			break;
 
@@ -726,7 +727,7 @@ static int inet_create(struct socket *sock, int protocol)
 		put_sock(sk->num, sk);
 		sk->dummy_th.source = ntohs(sk->num);
 	}
-	// 执行底层的初始化函数，tcp和udp都没有init函数
+	// 执行底层的初始化函数，tcp和udp都没有init函数,packet协议有，他会往mac头链表加入一个节点，用于监听感兴趣的数据
 	if (sk->prot->init) 
 	{
 		err = sk->prot->init(sk);

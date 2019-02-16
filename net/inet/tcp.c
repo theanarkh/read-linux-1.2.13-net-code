@@ -1561,7 +1561,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 					sk->err = 0;
 					return(tmp);
 				}
-
+				// 长连接 
 				if (sk->keepopen) 
 				{
 					send_sig(SIGPIPE, current, 0);
@@ -1650,7 +1650,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 				(flags & MSG_OOB) || !sk->packets_out)
 				tcp_send_skb(sk, skb);
 			else
-				// 继续缓存，得到条件后一起发送
+				// 继续缓存，满足条件后一起发送
 				tcp_enqueue_partial(skb, sk);
 			continue;
 		}
@@ -1762,7 +1762,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		 * FIXME: we need to optimize this.
 		 * Perhaps some hints here would be good.
 		 */
-		// 构建ip头和mac头，返回ip头+mac头的长度的大小
+		// 构建ip头和mac头，返回ip头+mac头的长度的大小,查找路由项的时候会给dev赋值
 		tmp = prot->build_header(skb, sk->saddr, sk->daddr, &dev,
 				 IPPROTO_TCP, sk->opt, skb->mem_len,sk->ip_tos,sk->ip_ttl);
 		if (tmp < 0 ) 
@@ -2881,6 +2881,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->copied_seq = skb->h.th->seq+1;
 	// 当收到对端fin包的时候，回复的ack包中的序列号	
 	newsk->fin_seq = skb->h.th->seq;
+	// 进入syn_recv状态
 	newsk->state = TCP_SYN_RECV;
 	newsk->timeout = 0;
 	newsk->ip_xmit_timeout = 0;
@@ -2988,7 +2989,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		tcp_statistics.TcpAttemptFails++;
 		return;
 	}
-	// skb和sock关联
+	// skb和sock关联，4个字节是用于tcp mss选项，告诉对端自己的mss
 	buff->len = sizeof(struct tcphdr)+4;
 	buff->sk = newsk;
 	buff->localroute = newsk->localroute;
@@ -2998,7 +2999,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	/*
 	 *	Put in the IP header and routing stuff. 
 	 */
-
+	// 构造ip和mac头
 	tmp = sk->prot->build_header(buff, newsk->saddr, newsk->daddr, &ndev,
 			       IPPROTO_TCP, NULL, MAX_SYN_SIZE,sk->ip_tos,sk->ip_ttl);
 
@@ -3021,6 +3022,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	}
 
 	buff->len += tmp;
+	// tcp头
 	t1 =(struct tcphdr *)((char *)t1 +tmp);
   
 	memcpy(t1, skb->h.th, sizeof(*t1));
@@ -3031,6 +3033,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	t1->dest = skb->h.th->source;
 	t1->source = newsk->dummy_th.source;
 	t1->seq = ntohl(newsk->write_seq++);
+	// 是个ack包，即第二次握手
 	t1->ack = 1;
 	newsk->window = tcp_select_window(newsk);
 	newsk->sent_seq = newsk->write_seq;
@@ -3050,18 +3053,21 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	ptr[3] =(newsk->mtu) & 0xff;
 
 	tcp_send_check(t1, daddr, saddr, sizeof(*t1)+4, newsk);
+	// 发送ack，即第二次握手
 	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
 	reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
+	// skb关联的socket为newsk，accept的时候摘取skb时即拿到该socket返回给应用层
 	skb->sk = newsk;
 
 	/*
 	 *	Charge the sock_buff to newsk. 
 	 */
-	 
+	// 把skb中数据的大小算在newsk中 
 	sk->rmem_alloc -= skb->mem_len;
 	newsk->rmem_alloc += skb->mem_len;
-	
+	// 
 	skb_queue_tail(&sk->receive_queue,skb);
+	// 连接队列节点个数加1
 	sk->ack_backlog++;
 	release_sock(newsk);
 	tcp_statistics.TcpOutSegs++;
@@ -3732,6 +3738,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 
 		if (!sk->dead) 
 			sk->state_change(sk);
+		// 对端已经收到本端的数据的序列号等于下一个应用层数据的序列号，说明本端的数据发送完毕
 		if (sk->rcv_ack_seq == sk->write_seq) 
 		{
 			flag |= 1;
@@ -3768,6 +3775,7 @@ extern __inline__ int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long 
 		tcp_options(sk,th);
 		sk->dummy_th.dest=th->source;
 		sk->copied_seq = sk->acked_seq;
+		// 唤醒阻塞在等待连接建立的进程
 		if(!sk->dead)
 			sk->state_change(sk);
 		if(sk->max_window==0)
@@ -3850,7 +3858,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 	}
 
 	switch(sk->state) 
-	{
+	{	
 		case TCP_SYN_RECV:
 		case TCP_SYN_SENT:
 		case TCP_ESTABLISHED:
@@ -4126,7 +4134,7 @@ extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk,
 			 *	When we ack the fin, we do the FIN 
 			 *	processing.
 			 */
-
+			// 收到的是fin包
 			if (skb->h.th->fin) 
 			{
 				tcp_fin(skb,sk,skb->h.th);
@@ -4448,6 +4456,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 		return(-ENOMEM);
 	}
 	sk->inuse = 1;
+	// tcp头和选项，告诉对方自己的接收窗口大小1
 	buff->len = 24;
 	buff->sk = sk;
 	buff->free = 0;
@@ -4539,6 +4548,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	// 组成MSS
 	ptr[2] = (sk->mtu) >> 8;
 	ptr[3] = (sk->mtu) & 0xff;
+	// tcp头的校验和
 	tcp_send_check(t1, sk->saddr, sk->daddr,
 		  sizeof(struct tcphdr) + 4, sk);
 
@@ -4663,7 +4673,7 @@ static int tcp_std_reset(struct sock *sk, struct sk_buff *skb)
 /*
  *	A TCP packet has arrived.
  */
- 
+// daddr,saddr是ip头的字段，len为tcp头+数据长度 
 int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	unsigned long daddr, unsigned short len,
 	unsigned long saddr, int redo, struct inet_protocol * protocol)
