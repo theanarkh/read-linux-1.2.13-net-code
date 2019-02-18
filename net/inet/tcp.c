@@ -4272,7 +4272,7 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 	// ptr指向有效数据的最后一个字节，
 	if (ptr)
 		ptr--;
-	// 数据的第一个字节的序列号+偏移,ptr指向紧急数据首地址
+	// 数据的第一个字节的序列号+偏移,ptr指向紧急数据偏移
 	ptr += th->seq;
 
 	/* ignore urgent data that we've already seen and read */
