@@ -55,10 +55,16 @@ static resource_entry_t *find_gap(resource_entry_t *root,
 	save_flags(flags);
 	cli();
 	for (p = root; ; p = p->next) {
+		/*
+			比如from是0，num是2，则占据的区间是0，1，2三个，所以要加num-1，
+			p->from+p->num-1 >= from成立说明from已经被使用，即from必须大于p对应的区间	
+		*/
 		if ((p != root) && (p->from+p->num-1 >= from)) {
 			p = NULL;
 			break;
 		}
+		// 说明from+num大于p对应的区间
+		// p小于下一个的区间，即说明from+num是未被使用，或者没有下一个节点了，说明from为最大的值
 		if ((p->next == NULL) || (p->next->from > from+num-1))
 			break;
 	}
@@ -73,13 +79,15 @@ void request_region(unsigned int from, unsigned int num, const char *name)
 {
 	resource_entry_t *p;
 	int i;
-
+	// 找一个还没被使用的节点
 	for (i = 0; i < IOTABLE_SIZE; i++)
 		if (iotable[i].num == 0)
 			break;
+	// 找不到
 	if (i == IOTABLE_SIZE)
 		printk("warning: ioport table is full\n");
 	else {
+		// 找出比from小的最后一个节点，即from追加到该节点后面
 		p = find_gap(&iolist, from, num);
 		if (p == NULL)
 			return;

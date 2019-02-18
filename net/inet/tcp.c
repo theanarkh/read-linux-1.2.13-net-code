@@ -2079,9 +2079,11 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 		return 0;
 	}
 	sk->inuse = 1;
+	// urg_data是两个字节，一个字节保存标记，一个保存一个字节的紧急数据
 	if (sk->urg_data & URG_VALID) 
 	{
 		char c = sk->urg_data;
+		// 如果不是预读，则读完后设置已读，下次读的时候就直接返回错误
 		if (!(flags & MSG_PEEK))
 			sk->urg_data = URG_READ;
 		// 只读一个字节
@@ -4267,10 +4269,10 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 {	
 	// 指向紧急数据最后一个字节的下一个字节
 	unsigned long ptr = ntohs(th->urg_ptr);
-	// ptr指向有效数据的最后一个字节
+	// ptr指向有效数据的最后一个字节，
 	if (ptr)
 		ptr--;
-	// 数据的第一个字节的序列号+偏移
+	// 数据的第一个字节的序列号+偏移,ptr指向紧急数据首地址
 	ptr += th->seq;
 
 	/* ignore urgent data that we've already seen and read */
@@ -4315,14 +4317,14 @@ extern __inline__ int tcp_urg(struct sock *sk, struct tcphdr *th,
 	/*
 	 *	Do we wait for any urgent data? - normally not
 	 */
-	 
+	// 在tcp_check_urg里设置，说明紧急数据有效
 	if (sk->urg_data != URG_NOTYET)
 		return 0;
 
 	/*
 	 *	Is the urgent pointer pointing into this packet? 
 	 */
-	 
+	// 指向紧急数据相对偏移
 	ptr = sk->urg_seq - th->seq + th->doff*4;
 	if (ptr >= len)
 		return 0;
@@ -4330,7 +4332,7 @@ extern __inline__ int tcp_urg(struct sock *sk, struct tcphdr *th,
 	/*
 	 *	Ok, got the correct packet, update info 
 	 */
-	 
+	// urg_data是两个字节，一个保存标记，一个保存一个字节的紧急数据
 	sk->urg_data = URG_VALID | *(ptr + (unsigned char *) th);
 	if (!sk->dead)
 		sk->data_ready(sk,0);

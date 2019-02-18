@@ -200,6 +200,7 @@ el1_probe(struct device *dev)
 
     for (i = 0; netcard_portlist[i]; i++) {
 	int ioaddr = netcard_portlist[i];
+	// 返回0说明该地址还没被使用
 	if (check_region(ioaddr, EL1_IO_EXTENT))
 	    continue;
 	if (el1_probe1(dev, ioaddr) == 0)
@@ -238,6 +239,7 @@ el1_probe1(struct device *dev, int ioaddr)
 	return ENODEV;
 
     /* Grab the region so we can find the another board if autoIRQ fails. */
+	// 标记该io区域为已使用
     request_region(ioaddr, EL1_IO_EXTENT,"3c501");
 
     /* We auto-IRQ by shutting off the interrupt line and letting it float

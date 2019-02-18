@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "sched.h": "c",
-        "netdevice.h": "c"
+        "netdevice.h": "c",
+        "config.h": "c"
     }
 }
