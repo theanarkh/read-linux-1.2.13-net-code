@@ -210,6 +210,7 @@ void put_sock(unsigned short num, struct sock *sk)
 	{
 		if (!(sk2->saddr & mask)) 
 		{
+			// 当前是第一个节点
 			if (sk2 == sk1) 
 			{
 				sk->next = sk->prot->sock_array[num];
@@ -1055,8 +1056,6 @@ static int inet_socketpair(struct socket *sock1, struct socket *sock2)
 {
 	 return(-EOPNOTSUPP);
 }
-
-
 /*
  *	Accept a pending connection. The TCP layer now gives BSD semantics.
  */
@@ -1073,7 +1072,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	 * We need to free it up because the tcp module creates
 	 * its own when it accepts one.
 	 */
-	// 销毁新socket结构体中的socke结构体,d调用底层的accept会返回一个新的sock
+	// 销毁新socket结构体中的sock结构体,调用底层的accept会返回一个新的sock
 	if (newsock->data)
 	{
 	  	struct sock *sk=(struct sock *)newsock->data;
@@ -1086,6 +1085,7 @@ static int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 		return(-EOPNOTSUPP);
 
 	/* Restore the state if we have been interrupted, and then returned. */
+	// 
 	if (sk1->pair != NULL ) 
 	{
 		sk2 = sk1->pair;

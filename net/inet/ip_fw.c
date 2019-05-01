@@ -128,6 +128,7 @@ extern inline int port_match(unsigned short *portptr,int nports,unsigned short p
 		nports -= 2;
 		portptr += 2;
 	}
+	// 匹配每个端口是否和port相等
 	while ( nports-- > 0 ) 
 	{
 		if ( *portptr++ == port ) 

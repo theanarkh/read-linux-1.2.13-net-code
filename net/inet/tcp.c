@@ -898,6 +898,7 @@ static int tcp_readable(struct sock *sk)
 		 * and a blocking read().  And the queue scan in tcp_read()
 		 * was correct.  Mike <pall@rz.uni-karlsruhe.de>
 		 */
+		// 有紧急数据则减去紧急数据的一个字节
 		if (skb->h.th->urg)
 			amount--;	/* don't count urg data */
 		if (amount && skb->h.th->psh) break;
@@ -1617,6 +1618,7 @@ static int tcp_write(struct sock *sk, unsigned char *from,
 		        int hdrlen;
 
 		         /* IP header + TCP header */
+			// 所有协议头的长度
 			hdrlen = ((unsigned long)skb->h.th - (unsigned long)skb->data)
 			         + sizeof(struct tcphdr);
 	
@@ -2053,7 +2055,7 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 	/*
 	 *	No URG data to read
 	 */
-	// 没有紧急数据或者紧急数据当作普通数据处理了
+	// 没有紧急数据或者紧急数据被读取了又或者紧急数据当作普通数据处理了
 	if (sk->urginline || !sk->urg_data || sk->urg_data == URG_READ)
 		return -EINVAL;	/* Yes this is right ! */
 		
@@ -2079,7 +2081,7 @@ static int tcp_read_urg(struct sock * sk, int nonblock,
 		return 0;
 	}
 	sk->inuse = 1;
-	// urg_data是两个字节，一个字节保存标记，一个保存一个字节的紧急数据
+	// urg_data是两个字节，一个字节保存紧急数据有效标记，一个保存一个字节的紧急数据
 	if (sk->urg_data & URG_VALID) 
 	{
 		char c = sk->urg_data;
@@ -2168,8 +2170,10 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		{
 			if (!skb)
 				break;
+			// 小于当前skb的序列号说明要读的数据已经读过了，大于seq说明当前skb可能是需要读取的数据，取决于skb->len
 			if (before(*seq, skb->h.th->seq))
 				break;
+			// offset表示当前数据包中已经被读取了的字节数，如果skb->len大于offset说明该skb的数据是需要被读取的
 			offset = *seq - skb->h.th->seq;
 			if (skb->h.th->syn)
 				offset--;
@@ -2243,8 +2247,9 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		/*
 		 *	Ok so how much can we use ? 
 		 */
-		 
+		//  数据总数-已经被读取的=可以被读取的大小
 		used = skb->len - offset;
+		// 要读的比可以读的少，取小的
 		if (len < used)
 			used = len;
 		/*
@@ -2252,20 +2257,27 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		 */
 		
 		if (sk->urg_data) 
-		{
+		{	
+			// 紧急数据离已经读取的数据之间还有多少个字节
 			unsigned long urg_offset = sk->urg_seq - *seq;
+			// 小于可以读取的数据说明紧急数据在该数据包中
 			if (urg_offset < used) 
-			{
+			{	
+				// 下一个要读的字节就是紧急数据，即urg_offset等于0
 				if (!urg_offset) 
-				{
+				{	// 紧急数据没有被当做普通数据处理则跳过紧急数据
 					if (!sk->urginline) 
-					{
+					{	
+						// 要读取的序列号加一
 						++*seq;
+						// 位置加一
 						offset++;
+						// 可读的字节数减一
 						used--;
 					}
 				}
 				else
+					// 指向紧急数据那个字节的的位置，先读到紧急数据前一个字节，下次读的时候跳过紧急数据再读下紧急数据的一个字节
 					used = urg_offset;
 			}
 		}
@@ -2274,7 +2286,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		 *	Copy it - We _MUST_ update *seq first so that we
 		 *	don't ever double read when we have dual readers
 		 */
-		 
+		// 更新下一个要读的序列号		 
 		*seq += used;
 
 		/*
@@ -2282,11 +2294,14 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		 *	do a second read it relies on the skb->users to avoid
 		 *	a crash when cleanup_rbuf() gets called.
 		 */
-		 
+		// tcp头加上offset即加上当前数据包中已经被读取的字节个数，即指向第一个需要被读的字节，used是可读字节数
 		memcpy_tofs(to,((unsigned char *)skb->h.th) +
 			skb->h.th->doff*4 + offset, used);
+		// 读取字节数累加
 		copied += used;
+		// 更新还需要读取的字节数
 		len -= used;
+		// 更新下一个写入的位置
 		to += used;
 		
 		/*
@@ -2296,9 +2311,10 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 		 */
 		 
 		skb->users --;
-		
+		// 下一个要读取的序列号在urg_seq的后面说明紧急数据已经被读取，清空
 		if (after(sk->copied_seq,sk->urg_seq))
 			sk->urg_data = 0;
+		// 当前数据包的数据还没被读完，继续读
 		if (used + offset < skb->len)
 			continue;
 		
@@ -4276,11 +4292,12 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 	ptr += th->seq;
 
 	/* ignore urgent data that we've already seen and read */
-	// ptr小于可以读取但还没有读取的字节的序列号，说明ptr指向的数据被读取过了
+	// ptr小于可以已读取的字节的序列号，说明ptr指向的数据被读取过了
 	if (after(sk->copied_seq, ptr))
 		return;
 
 	/* do we already have a newer (or duplicate) urgent pointer? */
+	// 之前已经收到过紧急数据，并且之前收到的紧急数据序列号比现在收到的大
 	if (sk->urg_data && !after(ptr, sk->urg_seq))
 		return;
 
@@ -4291,10 +4308,13 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 			// 给进程发送一个SIGURG信号
 			kill_proc(sk->proc, SIGURG, 1);
 		} else {
+			// 给进程组发送一个SIGURG信号
 			kill_pg(-sk->proc, SIGURG, 1);
 		}
 	}
+	// 标记紧急数据有效
 	sk->urg_data = URG_NOTYET;
+	// 设置紧急数据的序列号
 	sk->urg_seq = ptr;
 }
 
@@ -4310,14 +4330,14 @@ extern __inline__ int tcp_urg(struct sock *sk, struct tcphdr *th,
 	/*
 	 *	Check if we get a new urgent pointer - normally not 
 	 */
-	 
+	// 报文设置了紧急标记位，说明有紧急数据需要处理 
 	if (th->urg)
 		tcp_check_urg(sk,th);
 
 	/*
 	 *	Do we wait for any urgent data? - normally not
 	 */
-	// 在tcp_check_urg里设置，说明紧急数据有效
+	// 在tcp_check_urg里设置，说明紧急数据有效，紧急数据可被当做普通数据处理。
 	if (sk->urg_data != URG_NOTYET)
 		return 0;
 

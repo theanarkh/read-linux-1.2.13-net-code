@@ -245,7 +245,7 @@ struct socket *sock_alloc(void)
 	inode->i_sock = 1;// socket文件
 	inode->i_uid = current->uid;
 	inode->i_gid = current->gid;
-	// 执行inode的socket结构体，初始化inode结构体的socket结构体
+	// 指向inode的socket结构体，初始化inode结构体的socket结构体
 	sock = &inode->u.socket_i;
 	sock->state = SS_UNCONNECTED;
 	sock->flags = 0;
@@ -831,7 +831,7 @@ static int sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrl
 	}
 	newsock->type = sock->type;
 	newsock->ops = sock->ops;
-	// 创建一个底层的sock结构体和socket结构体互相关联
+	// 创建一个底层的sock结构体和新的socket结构体互相关联
 	if ((i = sock->ops->dup(newsock, sock)) < 0) 
 	{
 		sock_release(newsock);
