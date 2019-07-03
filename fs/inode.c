@@ -20,17 +20,17 @@ static struct inode_hash_entry {
 static struct inode * first_inode;
 static struct wait_queue * inode_wait = NULL;
 static int nr_inodes = 0, nr_free_inodes = 0;
-
+// 哈希函数
 static inline int const hashfn(dev_t dev, unsigned int i)
 {
 	return (dev ^ i) % NR_IHASH;
 }
-
+// 算出在哈希表的地址
 static inline struct inode_hash_entry * const hash(dev_t dev, int i)
 {
 	return hash_table + hashfn(dev, i);
 }
-
+// 头插法插入inode
 static void insert_inode_free(struct inode *inode)
 {
 	inode->i_next = first_inode;
@@ -40,6 +40,7 @@ static void insert_inode_free(struct inode *inode)
 	first_inode = inode;
 }
 
+// inode脱离链表，更新first_inode指针
 static void remove_inode_free(struct inode *inode)
 {
 	if (first_inode == inode)
@@ -54,20 +55,24 @@ static void remove_inode_free(struct inode *inode)
 void insert_inode_hash(struct inode *inode)
 {
 	struct inode_hash_entry *h;
+	// 得到插入的位置
 	h = hash(inode->i_dev, inode->i_ino);
-
+	// 头插法插入哈希链表
 	inode->i_hash_next = h->inode;
 	inode->i_hash_prev = NULL;
+	// 更新下一个节点的pre指针。即插入之前，链表不为空
 	if (inode->i_hash_next)
 		inode->i_hash_next->i_hash_prev = inode;
+	// 更新头指针
 	h->inode = inode;
 }
 
 static void remove_inode_hash(struct inode *inode)
 {
 	struct inode_hash_entry *h;
+	// 算出inode在哈希表的位置
 	h = hash(inode->i_dev, inode->i_ino);
-
+	// 参考上面的删除函数
 	if (h->inode == inode)
 		h->inode = inode->i_hash_next;
 	if (inode->i_hash_next)
@@ -76,7 +81,7 @@ static void remove_inode_hash(struct inode *inode)
 		inode->i_hash_prev->i_hash_next = inode->i_hash_next;
 	inode->i_hash_prev = inode->i_hash_next = NULL;
 }
-
+// 把inode插入到链表的末尾
 static void put_last_free(struct inode *inode)
 {
 	remove_inode_free(inode);
@@ -85,7 +90,7 @@ static void put_last_free(struct inode *inode)
 	inode->i_next = first_inode;
 	inode->i_next->i_prev = inode;
 }
-
+// 扩容
 void grow_inodes(void)
 {
 	struct inode * inode;
@@ -93,18 +98,20 @@ void grow_inodes(void)
 
 	if (!(inode = (struct inode*) get_free_page(GFP_KERNEL)))
 		return;
-
+	// 一页包括的inode结构体数
 	i=PAGE_SIZE / sizeof(struct inode);
+	// 总数累加
 	nr_inodes += i;
+	// 空闲数累加
 	nr_free_inodes += i;
-
+	// 参考insert_inode_free代码，保证first_inode非空 
 	if (!first_inode)
 		inode->i_next = inode->i_prev = first_inode = inode++, i--;
-
+	// 插入链表
 	for ( ; i ; i-- )
 		insert_inode_free(inode++);
 }
-
+// 初始化哈希表和空闲节点链表的头指针
 unsigned long inode_init(unsigned long start, unsigned long end)
 {
 	memset(hash_table, 0, sizeof(hash_table));
@@ -115,17 +122,18 @@ unsigned long inode_init(unsigned long start, unsigned long end)
 static void __wait_on_inode(struct inode *);
 
 static inline void wait_on_inode(struct inode * inode)
-{
+{	
+	// 如果已经被锁，则阻塞，插入inode的等待队列中
 	if (inode->i_lock)
 		__wait_on_inode(inode);
 }
-
+// 加锁
 static inline void lock_inode(struct inode * inode)
 {
 	wait_on_inode(inode);
 	inode->i_lock = 1;
 }
-
+// 解锁，唤醒等待队列
 static inline void unlock_inode(struct inode * inode)
 {
 	inode->i_lock = 0;
@@ -147,18 +155,23 @@ static inline void unlock_inode(struct inode * inode)
 void clear_inode(struct inode * inode)
 {
 	struct wait_queue * wait;
-
+	// 如果被锁了，等待inode释放
 	wait_on_inode(inode);
+	// 从哈希链表中删除该节点
 	remove_inode_hash(inode);
+	// 从空闲链表中删除该节点
 	remove_inode_free(inode);
+	// 阻塞在该inode进程队列
 	wait = ((volatile struct inode *) inode)->i_wait;
 	if (inode->i_count)
 		nr_free_inodes++;
+	// 清空inode内容
 	memset(inode,0,sizeof(*inode));
 	((volatile struct inode *) inode)->i_wait = wait;
+	// 作为空闲项插入链表
 	insert_inode_free(inode);
 }
-
+// 释放dev设备在first_inode链表的节点
 int fs_may_mount(dev_t dev)
 {
 	struct inode * inode, * next;
@@ -170,8 +183,10 @@ int fs_may_mount(dev_t dev)
 		next = inode->i_next;	/* clear_inode() changes the queues.. */
 		if (inode->i_dev != dev)
 			continue;
+		// 有进程引用或者数据还没同步到硬盘或者被锁了则返回
 		if (inode->i_count || inode->i_dirt || inode->i_lock)
 			return 0;
+		// 释放inode
 		clear_inode(inode);
 	}
 	return 1;
@@ -274,6 +289,7 @@ int inode_change_ok(struct inode *inode, struct iattr *attr)
  * Set the appropriate attributes from an attribute structure into
  * the inode structure.
  */
+// 设置inode的属性
 void inode_setattr(struct inode *inode, struct iattr *attr)
 {
 	if (attr->ia_valid & ATTR_UID)
@@ -354,7 +370,7 @@ void invalidate_inodes(dev_t dev)
 		clear_inode(inode);
 	}
 }
-
+// 把first_inode链表中dev对应的inode回写到底层
 void sync_inodes(dev_t dev)
 {
 	int i;
@@ -375,6 +391,7 @@ void iput(struct inode * inode)
 	if (!inode)
 		return;
 	wait_on_inode(inode);
+	// 没有进程使用，不需要回写
 	if (!inode->i_count) {
 		printk("VFS: iput: trying to free free inode\n");
 		printk("VFS: device %d/%d, inode %lu, mode=0%07o\n",
@@ -382,14 +399,18 @@ void iput(struct inode * inode)
 					inode->i_ino, inode->i_mode);
 		return;
 	}
+	// 是管道
 	if (inode->i_pipe)
 		wake_up_interruptible(&PIPE_WAIT(*inode));
 repeat:
+	// 还有进程在使用，引用数减一后返回
 	if (inode->i_count>1) {
 		inode->i_count--;
 		return;
 	}
+	// 唤醒等待队列的进程
 	wake_up(&inode_wait);
+	// 是管道文件则释放对应的一页内存，用来通信的
 	if (inode->i_pipe) {
 		unsigned long page = (unsigned long) PIPE_BASE(*inode);
 		PIPE_BASE(*inode) = NULL;
@@ -400,67 +421,83 @@ repeat:
 		if (!inode->i_nlink)
 			return;
 	}
+	// 需要回写
 	if (inode->i_dirt) {
 		write_inode(inode);	/* we can sleep - so do again */
 		wait_on_inode(inode);
 		goto repeat;
 	}
+	// 引用数减一后为0
 	inode->i_count--;
 	if (inode->i_mmap) {
 		printk("iput: inode %lu on device %d/%d still has mappings.\n",
 			inode->i_ino, MAJOR(inode->i_dev), MINOR(inode->i_dev));
 		inode->i_mmap = NULL;
 	}
+	// 空闲节点数加一
 	nr_free_inodes++;
 	return;
 }
-
+// 获取一个空闲的inode节点
 struct inode * get_empty_inode(void)
 {
 	struct inode * inode, * best;
 	int i;
-
+	// 还没有达到节点数阈值并且空闲节点数小于四分之一，则扩容
 	if (nr_inodes < NR_INODE && nr_free_inodes < (nr_inodes >> 2))
 		grow_inodes();
 repeat:
 	inode = first_inode;
 	best = NULL;
 	for (i = 0; i<nr_inodes; inode = inode->i_next, i++) {
+		// 该节点没有进程使用
 		if (!inode->i_count) {
+			// 还没有找到空闲的，则认为没有被进程引用的inode为最合适的节点，如果之前已经找到则不更新best了
 			if (!best)
 				best = inode;
+			// 数据是最新的并且没有被锁则为最合适的节点
 			if (!inode->i_dirt && !inode->i_lock) {
 				best = inode;
 				break;
 			}
 		}
 	}
+	// 没有找到合适的，或者找到了但是数据是脏的或者被锁了则扩容，函数一开始可能没有扩容，查找失败后再扩容
 	if (!best || best->i_dirt || best->i_lock)
 		if (nr_inodes < NR_INODE) {
 			grow_inodes();
+			// 重新找
 			goto repeat;
 		}
+	
 	inode = best;
+	// 节点数达到阈值还没有找到，则是在等待inode的队列，唤醒后在重新找
 	if (!inode) {
 		printk("VFS: No free inodes - contact Linus\n");
 		sleep_on(&inode_wait);
 		goto repeat;
 	}
+	// 找到的时候没有被锁，进程切换的时候可能被其他进程锁了，则继续找
 	if (inode->i_lock) {
 		wait_on_inode(inode);
 		goto repeat;
 	}
+	// 同上
 	if (inode->i_dirt) {
 		write_inode(inode);
 		goto repeat;
 	}
+	// 同上
 	if (inode->i_count)
 		goto repeat;
+	// 初始化inode
 	clear_inode(inode);
+	// 引用数是1
 	inode->i_count = 1;
 	inode->i_nlink = 1;
 	inode->i_version = ++event;
 	inode->i_sem.count = 1;
+	// 空闲节点数减一
 	nr_free_inodes--;
 	if (nr_free_inodes < 0) {
 		printk ("VFS: get_empty_inode: bad free inode count.\n");
@@ -468,30 +505,36 @@ repeat:
 	}
 	return inode;
 }
-
+// 获取一个用于管道的inode
 struct inode * get_pipe_inode(void)
 {
 	struct inode * inode;
 	extern struct inode_operations pipe_inode_operations;
-
+	// 获取一个inode
 	if (!(inode = get_empty_inode()))
 		return NULL;
+	// 指向一页内存
 	if (!(PIPE_BASE(*inode) = (char*) __get_free_page(GFP_USER))) {
 		iput(inode);
 		return NULL;
 	}
+	// 赋值操作函数集
 	inode->i_op = &pipe_inode_operations;
+	// 读写端，两个引用
 	inode->i_count = 2;	/* sum of readers/writers */
+	// 初始化字段
 	PIPE_WAIT(*inode) = NULL;
 	PIPE_START(*inode) = PIPE_LEN(*inode) = 0;
 	PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
 	PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 	PIPE_LOCK(*inode) = 0;
+	// inode对应的是管道文件
 	inode->i_pipe = 1;
 	inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
 	inode->i_uid = current->fsuid;
 	inode->i_gid = current->fsgid;
 	inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	// 大小
 	inode->i_blksize = PAGE_SIZE;
 	return inode;
 }

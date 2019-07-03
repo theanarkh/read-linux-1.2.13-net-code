@@ -300,10 +300,65 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 #endif
 	save_flags(flags);
 	cli();
+	// 队列为空，头指针指向待插入的节点wait，末节点的next指针指向自己
 	if (!*p) {
 		wait->next = wait;
 		*p = wait;
 	} else {
+		/* 
+			在第一个节点后面插入节点，形成单向循环链表 thanks to zym.
+			插入第二个节点的时候，是在第一个节点后面插入，后面在插入的时候，
+			是在第一个第二个节点中间插入，然后是从第一第三个直接插入，如此类推
+			*p指向第一个节点，(*p)->next指向第一个节点的下一个，插入第二个节点的时候，
+			第一个节点的下一个节点是自己。wait->next即新节点的next指向第一个节点的下一个节点，
+			(*p)->next = wait;即第一个节点的next指针指向新加入的节点。
+			传统的头插法只能形成单链表，不能循环，因为循环需要拿尾指针的next指向第一个
+			节点，但是随着链表的变成，无法找到尾节点。
+			p -> head -> null
+			p -> head -> node1
+							   next
+							|------->
+			p -> head -> node1 		node2
+								next		next
+							|------->   |------->
+			p -> head -> node1 		node3    node2
+			测试代码
+			#include <stdio.h>
+			struct wait_queue {
+				int task;
+				struct wait_queue * next;
+			};
+			void add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
+			{
+
+				if (!*p) {
+					//printf("%d", 1);
+					wait->next = wait;
+					*p = wait;
+				} else {
+					
+					// 头插法，形成单向链表
+					wait->next = (*p)->next;
+					(*p)->next = wait;
+					//printf("%d", wait->next == *p);
+				}
+			}
+			int main()
+			{
+				struct wait_queue wait = { 1, NULL };
+				struct wait_queue wait1 = { 2, NULL };
+				struct wait_queue wait2 = { 3, NULL };
+				struct wait_queue * head = NULL;
+				add_wait_queue(&head, &wait);
+				add_wait_queue(&head, &wait1);
+				add_wait_queue(&head, &wait2);
+				int c = 5;
+				while(c--) {
+					printf("%d", head->task);
+					head = head->next;
+				}
+			}
+		*/
 		wait->next = (*p)->next;
 		(*p)->next = wait;
 	}
@@ -320,6 +375,7 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 
 	save_flags(flags);
 	cli();
+	// 删除的是第一个节点并且只有一个节点了则头指针指向NULL
 	if ((*p == wait) &&
 #ifdef DEBUG
 	    (ok = 1) &&
@@ -327,6 +383,7 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	    ((*p = wait->next) == wait)) {
 		*p = NULL;
 	} else {
+		// 从自己开始遍历单向循环链表，找到next指向自己的，然后更新指针
 		tmp = wait;
 		while (tmp->next != wait) {
 			tmp = tmp->next;
