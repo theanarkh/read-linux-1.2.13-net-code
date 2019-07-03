@@ -47,11 +47,14 @@ int register_filesystem(struct file_system_type * fs)
 		return -EINVAL;
 	if (fs->next)
 		return -EBUSY;
+	// tmp是二级指针，指向文件系统链表的头指针的地址
 	tmp = &file_systems;
-	// 遍历链表，直到尾部
+	// 遍历链表，直到尾部，插入新的节点
 	while (*tmp) {
+		// 判断是否已经注册了该文件系统
 		if (strcmp((*tmp)->name, fs->name) == 0)
 			return -EBUSY;
+		// 指向当前节点的next域的地址，*tmp得到下一个被比较的节点
 		tmp = &(*tmp)->next;
 	}
 	// 利用二级指针指针修改next域的内容，不需要使用->next = fs的形式
@@ -59,6 +62,7 @@ int register_filesystem(struct file_system_type * fs)
 	return 0;
 }
 
+// 删除链表的节点
 int unregister_filesystem(struct file_system_type * fs)
 {
 	struct file_system_type ** tmp;
@@ -217,25 +221,31 @@ void sync_supers(dev_t dev)
 			sb->s_op->write_super(sb);
 	}
 }
-
+// 读取设备对应的超级块，一个文件系统一个超级块
 static struct super_block * get_super(dev_t dev)
 {
 	struct super_block * s;
 
 	if (!dev)
 		return NULL;
+	// 结构体数组的首地址
 	s = 0+super_blocks;
+	// 遍历数组
 	while (s < NR_SUPER+super_blocks)
+		// 找到
 		if (s->s_dev == dev) {
+			// 判断是否正在被使用
 			wait_on_super(s);
+			// 唤醒后继续判断一下，在阻塞的时候可能被修改了
 			if (s->s_dev == dev)
 				return s;
+			// 重新开始找
 			s = 0+super_blocks;
 		} else
 			s++;
 	return NULL;
 }
-
+// 找到超级块后，执行底层文件系统的函数
 void put_super(dev_t dev)
 {
 	struct super_block * sb;
@@ -256,6 +266,7 @@ void put_super(dev_t dev)
 		sb->s_op->put_super(sb);
 }
 
+// 读设置对应的超级块
 static struct super_block * read_super(dev_t dev,char *name,int flags,
 				       void *data, int silent)
 {
@@ -265,22 +276,27 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,
 	if (!dev)
 		return NULL;
 	check_disk_change(dev);
+	// 有则直接返回
 	s = get_super(dev);
 	if (s)
 		return s;
+	// 否则根据name在文件系统链表中（在系统初始化时建立的）找到对应的文件系统节点，里面有一个read_super函数
 	if (!(type = get_fs_type(name))) {
 		printk("VFS: on device %d/%d: get_fs_type(%s) failed\n",
 						MAJOR(dev), MINOR(dev), name);
 		return NULL;
 	}
+	// 在超级块数组中找到一个slot
 	for (s = 0+super_blocks ;; s++) {
 		if (s >= NR_SUPER+super_blocks)
 			return NULL;
 		if (!s->s_dev)
 			break;
 	}
+	// 赋值给超级块节点的字段
 	s->s_dev = dev;
 	s->s_flags = flags;
+	// 调底层的文件系统到硬盘去读取超级块内容
 	if (!type->read_super(s,data, silent)) {
 		s->s_dev = 0;
 		return NULL;

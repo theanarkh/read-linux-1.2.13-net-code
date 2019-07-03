@@ -63,6 +63,7 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
+	// 读取设置的第一块内容
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);

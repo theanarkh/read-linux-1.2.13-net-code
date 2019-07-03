@@ -1046,12 +1046,15 @@ static struct file_operations hd_fops = {
 };
 
 unsigned long hd_init(unsigned long mem_start, unsigned long mem_end)
-{
+{   
+	// 注册硬盘配置
 	if (register_blkdev(MAJOR_NR,"hd",&hd_fops)) {
 		printk("hd: unable to get major %d for harddisk\n",MAJOR_NR);
 		return mem_start;
 	}
+	// 注册请求处理函数
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	// 预读扇区大小
 	read_ahead[MAJOR_NR] = 8;		/* 8 sector (4kB) read-ahead */
 	hd_gendisk.next = gendisk_head;
 	gendisk_head = &hd_gendisk;

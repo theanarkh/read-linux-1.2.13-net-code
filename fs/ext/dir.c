@@ -63,7 +63,7 @@ struct inode_operations ext_dir_inode_operations = {
 	ext_truncate,		/* truncate */
 	NULL			/* permission */
 };
-
+// 把inode对应的目录下所有文件、目录读出来，filp是inode对应的file结构体，count是读取的个数
 static int ext_readdir(struct inode * inode, struct file * filp,
 	struct dirent * dirent, int count)
 {
@@ -79,13 +79,18 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 	if ((filp->f_pos & 7) != 0)
 		return -EBADF;
 	ret = 0;
+	// 当前位置小于文件大小，即还没读完，处理每块中的目录项
 	while (!ret && filp->f_pos < inode->i_size) {
+		// 从第n块数据，偏移为offset的地址开始读
 		offset = filp->f_pos & 1023;
+		// 读取inode对应的文件内容的第几块数据，0表示只读，不创建新的块
 		bh = ext_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
+		// 读取失败，跳过这个块，1024是一个块的大小，减去offset即准备要读的大小，跳过他
 		if (!bh) {
 			filp->f_pos += 1024-offset;
 			continue;
 		}
+		// 找到大于offset的第一个entry首地址或者rec_len为0的entry首地址
 		for (i = 0; i < 1024 && i < offset; ) {
 			de = (struct ext_dir_entry *) (bh->b_data + i);
 			if (!de->rec_len)
@@ -93,7 +98,9 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 			i += de->rec_len;
 		}
 		offset = i;
+		// 当前待处理的目录项
 		de = (struct ext_dir_entry *) (offset + bh->b_data);
+		// 处理一块中的目录项
 		while (!ret && offset < 1024 && filp->f_pos < inode->i_size) {
 			if (de->rec_len < 8 || de->rec_len % 8 != 0 ||
 			    de->rec_len < de->name_len + 8 ||
@@ -106,16 +113,21 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 					filp->f_pos = inode->i_size;
 				continue;
 			}
+			// 下一个entry的位置
 			offset += de->rec_len;
 			filp->f_pos += de->rec_len;
+			// 有效的节点则处理
 			if (de->inode) {
+				// 复制名字到dirent
 				for (i = 0; i < de->name_len; i++)
 					if ((c = de->name[i]) != 0)
 						put_fs_byte(c,i+dirent->d_name);
 					else
 						break;
+				// 名字不为空则不为0
 				if (i) {
 					put_fs_long(de->inode,&dirent->d_ino);
+					// 结尾字符
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);
 					ret = ROUND_UP(NAME_OFFSET(dirent)+i+1);

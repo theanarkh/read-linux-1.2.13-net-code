@@ -51,11 +51,14 @@ struct ext_super_block {
 	unsigned long s_reserved5;
 	unsigned short s_magic;
 };
-
+// 表示目录节点的结构体
 struct ext_dir_entry {
+	// inode号
 	unsigned long inode;
 	unsigned short rec_len;
+	// 目录名字长度
 	unsigned short name_len;
+	// 目录名字内容
 	char name[EXT_NAME_LEN];
 };
 

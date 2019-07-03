@@ -87,22 +87,42 @@ static int ext_file_read(struct inode * inode, struct file * filp, char * buf, i
 		printk("ext_file_read: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
+	// 从file结构体得到当前文件的偏移，即从哪开始读
 	offset = filp->f_pos;
+	// 文件大小
 	size = inode->i_size;
+	// 偏移大于文件大小，说明没有内容可读，否则算出还可以读多少字节
 	if (offset > size)
 		left = 0;
 	else
 		left = size - offset;
+	// 可读的大于要读的，则更新left，left表示要读的
 	if (left > count)
 		left = count;
+	// 没有内容可读或者count小于等于0则直接返回0，不需要读
 	if (left <= 0)
 		return 0;
+	// 已读的字节数
 	read = 0;
+	// 文件偏移除以块大小得到该偏移在第几块上
 	block = offset >> BLOCK_SIZE_BITS;
+	// 在第几块的偏移大小
 	offset &= BLOCK_SIZE-1;
+	/*
+		文件真正占据大小，size如果是BLOCK_SIZE_BITS的整数倍x，
+		则加BLOCK_SIZE-1再除以BLOCK_SIZE_BITS,还是整数倍x,
+		如果size是BLOCK_SIZE_BITS的整数倍x还多y个字节，则加BLOCK_SIZE-1，
+		再除以BLOCK_SIZE_BITS，变成整数倍x+1;即文件占据的多少块
+	*/
 	size = (size + (BLOCK_SIZE-1)) >> BLOCK_SIZE_BITS;
+	/*
+		偏移 + 要读的大小如果是整数倍x，则加BLOCK_SIZE-1,再除以BLOCK_SIZE_BITS还是整数倍x,
+		如果是整数倍x还多y字节，则加BLOCK_SIZE-1，再除以BLOCK_SIZE_BITS是整数倍x+1，
+		即算出要读的是第几块
+	*/
 	blocks = (left + offset + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
 	bhb = bhe = buflist;
+	// 预读
 	if (filp->f_reada) {
 	        if(blocks < read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9))
 		  blocks = read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);

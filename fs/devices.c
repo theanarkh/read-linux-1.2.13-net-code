@@ -97,8 +97,10 @@ int register_blkdev(unsigned int major, const char * name, struct file_operation
 	}
 	if (major >= MAX_BLKDEV)
 		return -EINVAL;
+	// 
 	if (blkdevs[major].fops && blkdevs[major].fops != fops)
 		return -EBUSY;
+	// 初始化device_struct数组中的某个项
 	blkdevs[major].name = name;
 	blkdevs[major].fops = fops;
 	return 0;

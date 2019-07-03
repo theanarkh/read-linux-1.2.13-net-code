@@ -212,12 +212,14 @@ static struct buffer_head * ext_add_entry(struct inode * dir,
 	offset = 0;
 	de = (struct ext_dir_entry *) bh->b_data;
 	while (1) {
+		// 当前块已经判断完，并且还没到文件末尾
 		if ((char *)de >= BLOCK_SIZE+bh->b_data && offset < dir->i_size) {
 #ifdef EXTFS_DEBUG
 printk ("ext_add_entry: skipping to next block\n");
 #endif
 			brelse(bh);
 			bh = NULL;
+			// 继续读下一块
 			bh = ext_bread(dir,offset>>BLOCK_SIZE_BITS,0);
 			if (!bh)
 				return NULL;

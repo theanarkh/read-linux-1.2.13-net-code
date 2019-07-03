@@ -150,6 +150,7 @@ void put_write_access(struct inode * inode)
  * routines (currently minix_lookup) for it. It also checks for
  * fathers (pseudo-roots, mount-points)
  */
+// 在目录下找名为name的文件
 int lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
@@ -160,8 +161,11 @@ int lookup(struct inode * dir,const char * name, int len,
 	if (!dir)
 		return -ENOENT;
 /* check permissions before traversing mount-points */
+	// 需要执行权限
 	perm = permission(dir,MAY_EXEC);
+	// 要找的文件是父目录
 	if (len==2 && name[0] == '.' && name[1] == '.') {
+		// 如果查找的目录是根目录，则父目录也是根目录，直接返回
 		if (dir == current->fs->root) {
 			*result = dir;
 			return 0;
@@ -221,10 +225,12 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 	struct inode * inode;
 
 	*res_inode = NULL;
+	// 没有传base则从进程的当前工作目录开始找
 	if (!base) {
 		base = current->fs->pwd;
 		base->i_count++;
 	}
+	// 绝对路径，则从根目录开始找
 	if ((c = *pathname) == '/') {
 		iput(base);
 		base = current->fs->root;
@@ -233,11 +239,14 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 	}
 	while (1) {
 		thisname = pathname;
+		// 以/分割路径部分，遇到/则得到某级路径名称，thisname指向当前路径首地址，len代表该部分路径对应的长度
 		for(len=0;(c = *(pathname++))&&(c != '/');len++)
 			/* nothing */ ;
+		// c为空说明到最后一个字符，即路径结束
 		if (!c)
 			break;
 		base->i_count++;
+		// 在base目录下查找某个文件
 		error = lookup(base,thisname,len,&inode);
 		if (error) {
 			iput(base);

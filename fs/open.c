@@ -202,7 +202,7 @@ asmlinkage int sys_access(const char * filename, int mode)
 	current->fsgid = old_fsgid;
 	return res;
 }
-
+// 修改进程的当前工作目录
 asmlinkage int sys_chdir(const char * filename)
 {
 	struct inode * inode;
@@ -244,6 +244,7 @@ asmlinkage int sys_fchdir(unsigned int fd)
 	return (0);
 }
 
+// 修改进程的根目录
 asmlinkage int sys_chroot(const char * filename)
 {
 	struct inode * inode;
@@ -417,21 +418,27 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
+// 打开一个文件
 int do_open(const char * filename,int flags,int mode)
 {
 	struct inode * inode;
 	struct file * f;
 	int flag,error,fd;
-
+	// 找到一个可用的文件描述符
 	for(fd=0; fd<NR_OPEN && fd<current->rlim[RLIMIT_NOFILE].rlim_cur; fd++)
+		// 还没被使用则找到可用的
 		if (!current->files->fd[fd])
 			break;
+	// 找不到可用的
 	if (fd>=NR_OPEN || fd>=current->rlim[RLIMIT_NOFILE].rlim_cur)
 		return -EMFILE;
+	// 清除close_on_exec标记位
 	FD_CLR(fd,&current->files->close_on_exec);
+	// 获取一个可用的file结构体
 	f = get_empty_filp();
 	if (!f)
 		return -ENFILE;
+	// 建立fd到file结构体的映射
 	current->files->fd[fd] = f;
 	f->f_flags = flag = flags;
 	f->f_mode = (flag+1) & O_ACCMODE;
@@ -450,14 +457,17 @@ int do_open(const char * filename,int flags,int mode)
 		f->f_count--;
 		return error;
 	}
-
+	// 建立file结构体和inode的映射关系
 	f->f_inode = inode;
+	// 初始化文件偏移
 	f->f_pos = 0;
 	f->f_reada = 0;
 	f->f_op = NULL;
+	// 赋值操作file结构体的函数集
 	if (inode->i_op)
 		f->f_op = inode->i_op->default_file_ops;
 	if (f->f_op && f->f_op->open) {
+		// 调用底层文件系统的open函数
 		error = f->f_op->open(inode,f);
 		if (error) {
 			if (f->f_mode & 2) put_write_access(inode);
@@ -489,6 +499,7 @@ asmlinkage int sys_creat(const char * pathname, int mode)
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
+// 关闭
 int close_fp(struct file *filp)
 {
 	struct inode *inode;

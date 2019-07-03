@@ -28,7 +28,7 @@ asmlinkage int sys_readdir(unsigned int fd, struct dirent * dirent, unsigned int
 	int error;
 	struct file * file;
 	struct inode * inode;
-
+	// 通过fd找到inode
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) ||
 	    !(inode = file->f_inode))
 		return -EBADF;

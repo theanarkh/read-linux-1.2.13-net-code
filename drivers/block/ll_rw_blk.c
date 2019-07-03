@@ -25,11 +25,13 @@
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
  */
+// 请求硬盘数据的队列
 static struct request all_requests[NR_REQUEST];
 
 /*
  * used to wait on when there are no free requests
  */
+// 没有可用的request时，进程阻塞队列
 struct wait_queue * wait_for_request = NULL;
 
 /* This specifies how many sectors to read ahead on the disk.  */
@@ -40,6 +42,7 @@ int read_ahead[MAX_BLKDEV] = {0, };
  *	do_request-address
  *	next-request
  */
+// 请求队列和请求处理函数表格，在对应的驱动代码里初始化
 struct blk_dev_struct blk_dev[MAX_BLKDEV] = {
 	{ NULL, NULL },		/* 0 no_dev */
 	{ NULL, NULL },		/* 1 dev mem */
@@ -563,11 +566,13 @@ long blk_dev_init(long mem_start, long mem_end)
 	struct request * req;
 
 	req = all_requests + NR_REQUEST;
+	// 初始化all_requests数组
 	while (--req >= all_requests) {
 		req->dev = -1;
 		req->next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
+// 硬盘初始化
 #ifdef CONFIG_BLK_DEV_HD
 	mem_start = hd_init(mem_start,mem_end);
 #endif
