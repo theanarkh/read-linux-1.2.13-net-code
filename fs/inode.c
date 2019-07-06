@@ -538,7 +538,7 @@ struct inode * get_pipe_inode(void)
 	inode->i_blksize = PAGE_SIZE;
 	return inode;
 }
-
+// 获取inode节点
 struct inode * __iget(struct super_block * sb, int nr, int crossmntp)
 {
 	static struct wait_queue * update_wait = NULL;
@@ -548,13 +548,17 @@ struct inode * __iget(struct super_block * sb, int nr, int crossmntp)
 
 	if (!sb)
 		panic("VFS: iget with sb==NULL");
+	// 根据设备号和inode号获取哈希表位置
 	h = hash(sb->s_dev, nr);
 repeat:
 	for (inode = h->inode; inode ; inode = inode->i_hash_next)
+		// 设备相等并且inode号相等
 		if (inode->i_dev == sb->s_dev && inode->i_ino == nr)
 			goto found_it;
+	
 	if (!empty) {
 		h->updating++;
+		// 获取一个空闲inode
 		empty = get_empty_inode();
 		if (!--h->updating)
 			wake_up(&update_wait);
@@ -573,10 +577,14 @@ repeat:
 	goto return_it;
 
 found_it:
+	// 找到了，该inode还没有被引用则引用数减一，如果被引用了说明之前就减过一了
 	if (!inode->i_count)
 		nr_free_inodes--;
+	// inode引用数加一
 	inode->i_count++;
+	// 可能被锁，需要阻塞
 	wait_on_inode(inode);
+	// 唤醒后发现被改了，重新找
 	if (inode->i_dev != sb->s_dev || inode->i_ino != nr) {
 		printk("Whee.. inode changed from under us. Tell Linus\n");
 		iput(inode);
@@ -607,14 +615,23 @@ return_it:
 static void __wait_on_inode(struct inode * inode)
 {
 	struct wait_queue wait = { current, NULL };
-
+	/*
+		把当前进程作为新节点挂载到inode->i_wait队列中,
+		这里要先加入到等待队列，然后才能修改状态为阻塞状态。
+		如果先修改状态，然后切换到其他进程执行了，就回不来了，
+		因为加入了队列，等待其他进程的唤醒。
+	*/
 	add_wait_queue(&inode->i_wait, &wait);
 repeat:
+	// 阻塞
 	current->state = TASK_UNINTERRUPTIBLE;
+	// 如果被锁了，则调度其他进程执行，被唤醒后继续判断是否被锁了
 	if (inode->i_lock) {
 		schedule();
 		goto repeat;
 	}
+	// 脱离等待队列
 	remove_wait_queue(&inode->i_wait, &wait);
+	// 修改进程状态
 	current->state = TASK_RUNNING;
 }
