@@ -41,11 +41,11 @@ static void minix_commit_super (struct super_block * sb,
 	mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	sb->s_dirt = 0;
 }
-
+// 回写超级块信息到硬盘
 void minix_write_super (struct super_block * sb)
 {
 	struct minix_super_block * ms;
-
+	// 没有设置只读标记
 	if (!(sb->s_flags & MS_RDONLY)) {
 		ms = sb->u.minix_sb.s_ms;
 
@@ -62,6 +62,7 @@ void minix_put_super(struct super_block *sb)
 	int i;
 	// 加锁
 	lock_super(sb);
+	// 
 	if (!(sb->s_flags & MS_RDONLY)) {
 		sb->u.minix_sb.s_ms->s_state = sb->u.minix_sb.s_mount_state;
 		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
@@ -92,11 +93,11 @@ static struct super_operations minix_sops = {
 	minix_statfs,
 	minix_remount
 };
-
+// 重新挂载文件系统，其实只能改变flag，而不是卸载再挂载
 int minix_remount (struct super_block * sb, int * flags, char * data)
 {
 	struct minix_super_block * ms;
-
+	// s_ms保存的minix文件系统超级块的信息
 	ms = sb->u.minix_sb.s_ms;
 	if ((*flags & MS_RDONLY) == (sb->s_flags & MS_RDONLY))
 		return 0;
@@ -169,7 +170,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	s->u.minix_sb.s_imap_blocks = ms->s_imap_blocks;
 	// 数据块位图块数
 	s->u.minix_sb.s_zmap_blocks = ms->s_zmap_blocks;
-	// 第一个块在硬盘的位置
+	// 第一个数据块在硬盘的块号
 	s->u.minix_sb.s_firstdatazone = ms->s_firstdatazone;
 	// 右移s_log_zone_size位得到每块的大小，区别于用于存储数据的块大小 
 	s->u.minix_sb.s_log_zone_size = ms->s_log_zone_size;
@@ -275,9 +276,9 @@ void minix_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(sb->u.minix_sb.s_namelen, &buf->f_namelen);
 	/* Don't know what value to put in buf->f_fsid */
 }
-
+// i_data里保存的是文件内容的块号和硬盘块号的对应关系
 #define inode_bmap(inode,nr) ((inode)->u.minix_i.i_data[(nr)])
-
+// bh->b_data保存的是文件内容块号和硬盘块号的对应关系
 static int block_bmap(struct buffer_head * bh, int nr)
 {
 	int tmp;
@@ -288,7 +289,7 @@ static int block_bmap(struct buffer_head * bh, int nr)
 	brelse(bh);
 	return tmp;
 }
-
+// 获取文件内容的逻辑块号在硬盘中对应的实际块号
 int minix_bmap(struct inode * inode,int block)
 {
 	int i;
@@ -301,25 +302,35 @@ int minix_bmap(struct inode * inode,int block)
 		printk("minix_bmap: block>big");
 		return 0;
 	}
+	// 小于7的块号直接存在inode里
 	if (block < 7)
 		return inode_bmap(inode,block);
 	block -= 7;
+	// inode的i_data的第八个元素保存了一个块号，该块里的内容保存了512个块号，即第8块开始的文件内容
 	if (block < 512) {
+		// 先拿到一级块号
 		i = inode_bmap(inode,7);
 		if (!i)
 			return 0;
+		// 把一级块号对应的数据从硬盘读取进来，然后再根据偏移找到对应的二级块号，即文件内容对应的块号
 		return block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block);
 	}
 	block -= 512;
+	/*
+		inode的i_data的第九个元素保存了一个块号，该块包括了512块号，
+		512块号每个块号对应的块又保存了512个块号，最后的512块号保存了文件内容的块号
+	*/
 	i = inode_bmap(inode,8);
 	if (!i)
 		return 0;
+	// >>9即除以512算出在哪个二级块
 	i = block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block>>9);
 	if (!i)
 		return 0;
+	// &511算出偏移
 	return block_bmap(bread(inode->i_dev,i,BLOCK_SIZE),block & 511);
 }
-
+// 读取buffer中某个硬盘数据块对应的内容，create=1，说明没有对应数据块则创建一个
 static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create)
 {
 	int tmp;
@@ -328,31 +339,42 @@ static struct buffer_head * inode_getblk(struct inode * inode, int nr, int creat
 
 	p = inode->u.minix_i.i_data + nr;
 repeat:
+	// 硬盘块号
 	tmp = *p;
 	if (tmp) {
+		// 判断是不是在buffer里。
 		result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
+		// 判断p指向块号是不是变了，是的话说明获取的数据result不是对的
 		if (tmp == *p)
 			return result;
 		brelse(result);
 		goto repeat;
 	}
+	// create是0说明不需要新建，等于1即找不到的时候新建一个
 	if (!create)
 		return NULL;
+	// 从硬盘中创建一个新的块
 	tmp = minix_new_block(inode->i_sb);
 	if (!tmp)
 		return NULL;
+	// 
 	result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
+	// p非空说明该项被使用了，则释放，可能因为中断引起的
 	if (*p) {
 		minix_free_block(inode->i_sb,tmp);
 		brelse(result);
 		goto repeat;
 	}
+	// 保存映射关系
 	*p = tmp;
+	// 创建时间
 	inode->i_ctime = CURRENT_TIME;
+	// inode新增了一个映射关系，需要回写到硬盘 
 	inode->i_dirt = 1;
 	return result;
 }
 
+// 读取buffer中硬盘某个块的对应的数据，或者新建一个块，bh->b_data保存了512个文件块号到硬盘块号。逻辑类似上面的函数
 static struct buffer_head * block_getblk(struct inode * inode, 
 	struct buffer_head * bh, int nr, int create)
 {
@@ -362,6 +384,7 @@ static struct buffer_head * block_getblk(struct inode * inode,
 
 	if (!bh)
 		return NULL;
+	// 数据不是最新的，则先刷新缓存的数据
 	if (!bh->b_uptodate) {
 		ll_rw_block(READ, 1, &bh);
 		wait_on_buffer(bh);
@@ -402,7 +425,11 @@ repeat:
 	brelse(bh);
 	return result;
 }
-
+/*
+	获取硬盘某块数据的内容，是对上面两个函数的封装，
+	主要是计算block的逻辑,inode_getblk,block_getblk是已经知道要获取
+	的是硬盘的哪个块。minix_getblk是给这两个函数计算出最终的硬盘块号
+*/
 struct buffer_head * minix_getblk(struct inode * inode, int block, int create)
 {
 	struct buffer_head * bh;
@@ -427,16 +454,19 @@ struct buffer_head * minix_getblk(struct inode * inode, int block, int create)
 	bh = block_getblk(inode, bh, block>>9, create);
 	return block_getblk(inode, bh, block & 511, create);
 }
-
+// 读某块内容，先从buffer获取，没有的话再去读取硬盘里的数据
 struct buffer_head * minix_bread(struct inode * inode, int block, int create)
 {
 	struct buffer_head * bh;
-
+	// 从buffer里读取对应硬盘块的数据
 	bh = minix_getblk(inode,block,create);
+	// 失败或者是最新的则返回
 	if (!bh || bh->b_uptodate)
 		return bh;
+	// 获取到但是不是最新的数据则调驱动层去读取最新的
 	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
+	// 是最新的则返回
 	if (bh->b_uptodate)
 		return bh;
 	brelse(bh);
@@ -457,7 +487,7 @@ void minix_read_inode(struct inode * inode)
 			inode->i_dev, ino);
 		return;
 	}
-	// 算出inode在硬盘的块号，imap是存储数据块位图相关的信息需要的空大小
+	// 文件系统第一块是引导扇区，第二块是超级块，算出inode在硬盘的块号，imap是存储数据块位图相关的信息需要的空大小
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks +
 		    inode->i_sb->u.minix_sb.s_zmap_blocks +
 		    (ino-1)/MINIX_INODES_PER_BLOCK;
@@ -514,6 +544,7 @@ static struct buffer_head * minix_update_inode(struct inode * inode)
 		inode->i_dirt = 0;
 		return 0;
 	}
+	// 算出inode在硬盘哪个数据块,s_imap_blocks和s_zmap_blocks是数据位图和inode位图的块数
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks + inode->i_sb->u.minix_sb.s_zmap_blocks +
 		(ino-1)/MINIX_INODES_PER_BLOCK;
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE))) {
@@ -521,6 +552,7 @@ static struct buffer_head * minix_update_inode(struct inode * inode)
 		inode->i_dirt = 0;
 		return 0;
 	}
+	// 算出inode在这个数据块的偏移
 	raw_inode = ((struct minix_inode *)bh->b_data) +
 		(ino-1)%MINIX_INODES_PER_BLOCK;
 	raw_inode->i_mode = inode->i_mode;

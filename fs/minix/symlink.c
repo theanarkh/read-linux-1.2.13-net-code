@@ -41,7 +41,7 @@ struct inode_operations minix_symlink_inode_operations = {
 	NULL,			/* truncate */
 	NULL			/* permission */
 };
-
+// 打开软链对应的文件
 static int minix_follow_link(struct inode * dir, struct inode * inode,
 	int flag, int mode, struct inode ** res_inode)
 {
@@ -67,6 +67,7 @@ static int minix_follow_link(struct inode * dir, struct inode * inode,
 		iput(dir);
 		return -ELOOP;
 	}
+	// 读取文件第一块内容
 	if (!(bh = minix_bread(inode, 0, 0))) {
 		iput(inode);
 		iput(dir);
@@ -74,12 +75,13 @@ static int minix_follow_link(struct inode * dir, struct inode * inode,
 	}
 	iput(inode);
 	current->link_count++;
+	// 打开b_data里的保存的文件名对应的文件
 	error = open_namei(bh->b_data,flag,mode,res_inode,dir);
 	current->link_count--;
 	brelse(bh);
 	return error;
 }
-
+// 读取软链文件的内容，即文件路径
 static int minix_readlink(struct inode * inode, char * buffer, int buflen)
 {
 	struct buffer_head * bh;

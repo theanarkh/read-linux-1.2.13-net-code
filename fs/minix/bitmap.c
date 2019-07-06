@@ -65,20 +65,26 @@ void minix_free_block(struct super_block * sb, int block)
 	if (bh)
 		bh->b_dirt=0;
 	brelse(bh);
+	// 算出在文件系统内块数
 	zone = block - sb->u.minix_sb.s_firstdatazone + 1;
+	// 每个块位图有1024字节，每个字节8个比特，可以管理8192个块
 	bit = zone & 8191;
+	// 算出块落在哪个块的位图
 	zone >>= 13;
+	// 取出保存了位图的数据块
 	bh = sb->u.minix_sb.s_zmap[zone];
 	if (!bh) {
 		printk("minix_free_block: nonexistent bitmap buffer\n");
 		return;
 	}
+	// 设置该块为空闲
 	if (!clear_bit(bit,bh->b_data))
 		printk("free_block (%04x:%d): bit already cleared\n",sb->s_dev,block);
+	// 回写
 	mark_buffer_dirty(bh, 1);
 	return;
 }
-
+// 在硬盘中新建一个数据块
 int minix_new_block(struct super_block * sb)
 {
 	struct buffer_head * bh;
@@ -90,28 +96,37 @@ int minix_new_block(struct super_block * sb)
 	}
 repeat:
 	j = 8192;
+	// 从数据块位图中找到一个可用的块号 
 	for (i=0 ; i<8 ; i++)
 		if ((bh=sb->u.minix_sb.s_zmap[i]) != NULL)
 			if ((j=find_first_zero_bit(bh->b_data, 8192)) < 8192)
 				break;
 	if (i>=8 || !bh || j>=8192)
 		return 0;
+	// 设置该块为已使用
 	if (set_bit(j,bh->b_data)) {
 		printk("new_block: bit already set");
 		goto repeat;
 	}
+	// 该buffer需要回写
 	mark_buffer_dirty(bh, 1);
+	// 算出该数据块在硬盘的绝对块号 
 	j += i*8192 + sb->u.minix_sb.s_firstdatazone-1;
 	if (j < sb->u.minix_sb.s_firstdatazone ||
 	    j >= sb->u.minix_sb.s_nzones)
 		return 0;
+	// 获取一个可用的buffer 
 	if (!(bh = getblk(sb->s_dev,j,BLOCK_SIZE))) {
 		printk("new_block: cannot get block");
 		return 0;
 	}
+	// 置0
 	memset(bh->b_data, 0, BLOCK_SIZE);
+	// 数据是有效的，即最新的
 	bh->b_uptodate = 1;
+	// 因为置0了，需要回写到硬盘
 	mark_buffer_dirty(bh, 1);
+	
 	brelse(bh);
 	return j;
 }
@@ -121,7 +136,7 @@ unsigned long minix_count_free_blocks(struct super_block *sb)
 	return (sb->u.minix_sb.s_nzones - count_used(sb->u.minix_sb.s_zmap,sb->u.minix_sb.s_zmap_blocks,sb->u.minix_sb.s_nzones))
 		 << sb->u.minix_sb.s_log_zone_size;
 }
-
+// 释放inode节点，并删除硬盘的inode节点
 void minix_free_inode(struct inode * inode)
 {
 	struct buffer_head * bh;
@@ -154,12 +169,14 @@ void minix_free_inode(struct inode * inode)
 		printk("free_inode: nonexistent imap in superblock\n");
 		return;
 	}
+	// 回收inode节点
 	clear_inode(inode);
+	// 清除位图的已使用标记
 	if (!clear_bit(ino & 8191, bh->b_data))
 		printk("free_inode: bit %lu already cleared.\n",ino);
 	mark_buffer_dirty(bh, 1);
 }
-
+// 在inode对应的文件系统对应的硬盘中新增一个inode节点，并在内存申请一个对应的inode结构
 struct inode * minix_new_inode(const struct inode * dir)
 {
 	struct super_block * sb;
@@ -169,10 +186,13 @@ struct inode * minix_new_inode(const struct inode * dir)
 
 	if (!dir || !(inode = get_empty_inode()))
 		return NULL;
+	// 超级块
 	sb = dir->i_sb;
+	// 指向所属超级块
 	inode->i_sb = sb;
 	inode->i_flags = inode->i_sb->s_flags;
 	j = 8192;
+	// 从inode位图找到空闲项
 	for (i=0 ; i<8 ; i++)
 		if ((bh = inode->i_sb->u.minix_sb.s_imap[i]) != NULL)
 			if ((j=find_first_zero_bit(bh->b_data, 8192)) < 8192)
@@ -181,11 +201,13 @@ struct inode * minix_new_inode(const struct inode * dir)
 		iput(inode);
 		return NULL;
 	}
+	// 设置为已使用状态
 	if (set_bit(j,bh->b_data)) {	/* shouldn't happen */
 		printk("new_inode: bit already set");
 		iput(inode);
 		return NULL;
 	}
+	// 更新了位图，需要回写
 	mark_buffer_dirty(bh, 1);
 	j += i*8192;
 	if (!j || j >= inode->i_sb->u.minix_sb.s_ninodes) {
@@ -202,6 +224,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_op = NULL;
 	inode->i_blocks = inode->i_blksize = 0;
+	// 插入inode列表末尾，表示inode节点已使用
 	insert_inode_hash(inode);
 	return inode;
 }

@@ -41,19 +41,24 @@ static inline int namecompare(int len, int maxlen,
  *
  * NOTE! unlike strncmp, minix_match returns 1 for success, 0 for failure.
  */
+// 比较文件名是否相等并且更新下一个要比较的地址偏移
 static int minix_match(int len, const char * name,
 	struct buffer_head * bh, unsigned long * offset,
 	struct minix_sb_info * info)
 {
 	struct minix_dir_entry * de;
-
+	// 目录项
 	de = (struct minix_dir_entry *) (bh->b_data + *offset);
+	// 指向下一个目录项，s_dirsize表示一个目录项的大小
 	*offset += info->s_dirsize;
+	// 参数校验,s_namelen是该文件系统对文件名的长度限制
 	if (!de->inode || len > info->s_namelen)
 		return 0;
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
+	// name是空并且当前目录项的名字是当前目录，则返回匹配，为了解决路径中连续两个斜杠的问题
 	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
 		return 1;
+	// 比较名字
 	return namecompare(len,info->s_namelen,name,de->name);
 }
 
@@ -76,7 +81,9 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 	*res_dir = NULL;
 	if (!dir || !dir->i_sb)
 		return NULL;
+	// minix超级块
 	info = &dir->i_sb->u.minix_sb;
+	// 文件名长度是否超过了限制
 	if (namelen > info->s_namelen) {
 #ifdef NO_TRUNCATE
 		return NULL;
@@ -86,29 +93,39 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 	}
 	bh = NULL;
 	block = offset = 0;
+	// 有没有超过了目录文件的大小
 	while (block*BLOCK_SIZE+offset < dir->i_size) {
 		if (!bh) {
+			// 读入目录的内容，即一系列的目录项结构体
 			bh = minix_bread(dir,block,0);
+			// 读失败则跳过，继续读下一块
 			if (!bh) {
 				block++;
 				continue;
 			}
 		}
+		// 保存当前要比较的目录项,返回给调用方，offset在minix_match中被更新为下一个目录项
 		*res_dir = (struct minix_dir_entry *) (bh->b_data + offset);
+		// 匹配则返回
 		if (minix_match(namelen,name,bh,&offset,info))
 			return bh;
+		// 不匹配，判断是否超过了数据块的大小，不是的话继续匹配下一个目录项
 		if (offset < bh->b_size)
 			continue;
+		// 该块目录项已经比较完，还没有找到合适的
 		brelse(bh);
+		// 重置buffer，下一个循环读入下一个数据块
 		bh = NULL;
+		// 重置目录项偏移
 		offset = 0;
+		// 下一个循环要读取的块号
 		block++;
 	}
 	brelse(bh);
 	*res_dir = NULL;
 	return NULL;
 }
-
+// 查找name对应的inode内容
 int minix_lookup(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
@@ -123,12 +140,15 @@ int minix_lookup(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
+	// 判断是否有name对应的目录项
 	if (!(bh = minix_find_entry(dir,name,len,&de))) {
 		iput(dir);
 		return -ENOENT;
 	}
+	// inode号
 	ino = de->inode;
 	brelse(bh);
+	// 读取inode的内容
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;
@@ -147,6 +167,7 @@ int minix_lookup(struct inode * dir,const char * name, int len,
  * may not sleep between calling this and putting something into
  * the entry, as someone else might have used it while you slept.
  */
+// 新增一个目录项
 static int minix_add_entry(struct inode * dir,
 	const char * name, int namelen,
 	struct buffer_head ** res_buf,
@@ -162,6 +183,7 @@ static int minix_add_entry(struct inode * dir,
 	*res_dir = NULL;
 	if (!dir || !dir->i_sb)
 		return -ENOENT;
+	// 超级块内容
 	info = &dir->i_sb->u.minix_sb;
 	if (namelen > info->s_namelen) {
 #ifdef NO_TRUNCATE
@@ -180,31 +202,44 @@ static int minix_add_entry(struct inode * dir,
 			if (!bh)
 				return -ENOSPC;
 		}
+		// 当前目录项
 		de = (struct minix_dir_entry *) (bh->b_data + offset);
+		// 更新下一个目录项地址
 		offset += info->s_dirsize;
+		// 遍历完全部的目录项，都没有找到重复的项，则追加一个目录项
 		if (block*bh->b_size + offset > dir->i_size) {
+			// 初始化
 			de->inode = 0;
+			// 更新目录文件大小
 			dir->i_size = block*bh->b_size + offset;
+			// inode节点数据有更新，需要回写
 			dir->i_dirt = 1;
 		}
+		// 已存在的目录项
 		if (de->inode) {
+			// 判断文件名为name的目录项是否已经存在
 			if (namecompare(namelen, info->s_namelen, name, de->name)) {
 				brelse(bh);
 				return -EEXIST;
 			}
 		} else {
+			// 新增一个目录项
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			dir->i_dirt = 1;
 			for (i = 0; i < info->s_namelen ; i++)
 				de->name[i] = (i < namelen) ? name[i] : 0;
 			dir->i_version = ++event;
+			// 新增了一个目录项，需要回写
 			mark_buffer_dirty(bh, 1);
+			// 返回新增的目录项
 			*res_dir = de;
 			break;
 		}
+		// 还没超过块的大小，则不需要读入新的块
 		if (offset < bh->b_size)
 			continue;
 		brelse(bh);
+		// 重置然后读入下一块
 		bh = NULL;
 		offset = 0;
 		block++;
@@ -212,7 +247,7 @@ static int minix_add_entry(struct inode * dir,
 	*res_buf = bh;
 	return 0;
 }
-
+// 新建一个文件
 int minix_create(struct inode * dir,const char * name, int len, int mode,
 	struct inode ** result)
 {
@@ -224,6 +259,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
+	// 在硬盘和内存都新建一个inode节点
 	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
@@ -232,6 +268,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 	inode->i_op = &minix_file_inode_operations;
 	inode->i_mode = mode;
 	inode->i_dirt = 1;
+	// 找到一个可用的目录项，de保存目录项地址
 	error = minix_add_entry(dir,name,len, &bh ,&de);
 	if (error) {
 		inode->i_nlink--;
@@ -240,6 +277,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 		iput(dir);
 		return error;
 	}
+	// 保存inode号到目录项
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
@@ -247,7 +285,7 @@ int minix_create(struct inode * dir,const char * name, int len, int mode,
 	*result = inode;
 	return 0;
 }
-
+// 新建一个inode，文件类型根据mode判断
 int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rdev)
 {
 	int error;
@@ -257,12 +295,14 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 
 	if (!dir)
 		return -ENOENT;
+	// 判断之前是否已经存在名字为name的目录项
 	bh = minix_find_entry(dir,name,len,&de);
 	if (bh) {
 		brelse(bh);
 		iput(dir);
 		return -EEXIST;
 	}
+	// 新建一个inode
 	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
@@ -289,6 +329,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = rdev;
 	inode->i_dirt = 1;
+	// 新增一个目录项，de保存新增的地址
 	error = minix_add_entry(dir, name, len, &bh, &de);
 	if (error) {
 		inode->i_nlink--;
@@ -297,6 +338,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 		iput(dir);
 		return error;
 	}
+	// 保存inode号到目录项中
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
@@ -304,7 +346,7 @@ int minix_mknod(struct inode * dir, const char * name, int len, int mode, int rd
 	iput(inode);
 	return 0;
 }
-
+// 新建一个目录
 int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 {
 	int error;
@@ -317,24 +359,30 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -EINVAL;
 	}
+	// 超级块
 	info = &dir->i_sb->u.minix_sb;
+	// 重复性判断
 	bh = minix_find_entry(dir,name,len,&de);
 	if (bh) {
 		brelse(bh);
 		iput(dir);
 		return -EEXIST;
 	}
+	// 文件个数是否超过限制 
 	if (dir->i_nlink >= MINIX_LINK_MAX) {
 		iput(dir);
 		return -EMLINK;
 	}
+	// 新增一个inode
 	inode = minix_new_inode(dir);
 	if (!inode) {
 		iput(dir);
 		return -ENOSPC;
 	}
 	inode->i_op = &minix_dir_inode_operations;
+	// 设置文件的大小，为两个目录项，用来存..和.
 	inode->i_size = 2 * info->s_dirsize;
+	// 申请一个数据块，并读取第一块数据，即读入刚申请的那个块
 	dir_block = minix_bread(inode,0,1);
 	if (!dir_block) {
 		iput(dir);
@@ -344,18 +392,23 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		return -ENOSPC;
 	}
 	de = (struct minix_dir_entry *) dir_block->b_data;
+	// 第一项是保存.的，inode即自己
 	de->inode=inode->i_ino;
 	strcpy(de->name,".");
+	// 第二项保存..的，即保存父目录项inode号
 	de = (struct minix_dir_entry *) (dir_block->b_data + info->s_dirsize);
 	de->inode = dir->i_ino;
 	strcpy(de->name,"..");
+	// inode本身链接数是一，.指向自己，所以是2个
 	inode->i_nlink = 2;
+	// 新增了东西，需要回写
 	mark_buffer_dirty(dir_block, 1);
 	brelse(dir_block);
 	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->fs->umask);
 	if (dir->i_mode & S_ISGID)
 		inode->i_mode |= S_ISGID;
 	inode->i_dirt = 1;
+	// 追加一个目录项，de保存新目录的地址
 	error = minix_add_entry(dir, name, len, &bh, &de);
 	if (error) {
 		iput(dir);
@@ -363,9 +416,12 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(inode);
 		return error;
 	}
+	// 保存inode号到目录项
 	de->inode = inode->i_ino;
 	mark_buffer_dirty(bh, 1);
+	// 父目录链接数加一，因为子目录的..目录项指向他
 	dir->i_nlink++;
+	// 父inode也需要回写
 	dir->i_dirt = 1;
 	iput(dir);
 	iput(inode);
@@ -376,6 +432,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 /*
  * routine to check that the specified directory is empty (for rmdir)
  */
+// 判断目录是不是空的
 static int empty_dir(struct inode * inode)
 {
 	unsigned int block, offset;
@@ -388,36 +445,49 @@ static int empty_dir(struct inode * inode)
 	info = &inode->i_sb->u.minix_sb;
 	block = 0;
 	bh = NULL;
+	// 偏移为两个目录项之后，从这个开始遍历全部目录项，有一个还有数据说明目录非空
 	offset = 2*info->s_dirsize;
+	// 目录文件的大小不是目录项的整数倍，说明数据有问题
 	if (inode->i_size & (info->s_dirsize-1))
 		goto bad_dir;
+	// 目录文件大小小于两个目录项说明数据有问题，因为至少有.和..两项
 	if (inode->i_size < offset)
 		goto bad_dir;
+	// 读取目录文件的第一块内容
 	bh = minix_bread(inode,0,0);
 	if (!bh)
 		goto bad_dir;
 	de = (struct minix_dir_entry *) bh->b_data;
+	// 第一项没有内容或者不等于.则说明有问题
 	if (!de->inode || strcmp(de->name,"."))
 		goto bad_dir;
 	de = (struct minix_dir_entry *) (bh->b_data + info->s_dirsize);
+	// 第二项没有内容或者不等于..说明有问题
 	if (!de->inode || strcmp(de->name,".."))
 		goto bad_dir;
+	// 遍历每个目录项
 	while (block*BLOCK_SIZE+offset < inode->i_size) {
 		if (!bh) {
+			// 读入对应块的内容
 			bh = minix_bread(inode,block,0);
+			// 失败的就跳过
 			if (!bh) {
 				block++;
 				continue;
 			}
 		}
 		de = (struct minix_dir_entry *) (bh->b_data + offset);
+		// 下一个目录项地址
 		offset += info->s_dirsize;
+		// 还有数据说明，说明非空，直接返回
 		if (de->inode) {
 			brelse(bh);
 			return 0;
 		}
+		// 当前块的数据还没有读完
 		if (offset < bh->b_size)
 			continue;
+		// 继续读下一块
 		brelse(bh);
 		bh = NULL;
 		offset = 0;
@@ -430,7 +500,7 @@ bad_dir:
 	printk("Bad directory on device %04x\n",inode->i_dev);
 	return 1;
 }
-
+// 删除目录
 int minix_rmdir(struct inode * dir, const char * name, int len)
 {
 	int retval;
@@ -439,13 +509,16 @@ int minix_rmdir(struct inode * dir, const char * name, int len)
 	struct minix_dir_entry * de;
 
 	inode = NULL;
+	// name对应的目录是否存在
 	bh = minix_find_entry(dir,name,len,&de);
 	retval = -ENOENT;
 	if (!bh)
 		goto end_rmdir;
 	retval = -EPERM;
+	// 获取目录文件对应的inode
 	if (!(inode = iget(dir->i_sb, de->inode)))
 		goto end_rmdir;
+		// 权限校验
         if ((dir->i_mode & S_ISVTX) && !fsuser() &&
             current->fsuid != inode->i_uid &&
             current->fsuid != dir->i_uid)
@@ -458,6 +531,7 @@ int minix_rmdir(struct inode * dir, const char * name, int len)
 		retval = -ENOTDIR;
 		goto end_rmdir;
 	}
+	// 目录非空
 	if (!empty_dir(inode)) {
 		retval = -ENOTEMPTY;
 		goto end_rmdir;
@@ -472,12 +546,14 @@ int minix_rmdir(struct inode * dir, const char * name, int len)
 	}
 	if (inode->i_nlink != 2)
 		printk("empty directory has nlink!=2 (%d)\n",inode->i_nlink);
+	// 置为未使用
 	de->inode = 0;
 	dir->i_version = ++event;
 	mark_buffer_dirty(bh, 1);
 	inode->i_nlink=0;
 	inode->i_dirt=1;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	// 删除了..，所以父目录链接数减一
 	dir->i_nlink--;
 	dir->i_dirt=1;
 	retval = 0;
@@ -487,7 +563,7 @@ end_rmdir:
 	brelse(bh);
 	return retval;
 }
-
+// 链接数减一
 int minix_unlink(struct inode * dir, const char * name, int len)
 {
 	int retval;
@@ -541,7 +617,7 @@ end_unlink:
 	iput(dir);
 	return retval;
 }
-
+// 生成一个文件保存另一个文件路径，即软链
 int minix_symlink(struct inode * dir, const char * name, int len, const char * symname)
 {
 	struct minix_dir_entry * de;
@@ -565,6 +641,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 		return -ENOSPC;
 	}
 	i = 0;
+// 软链文章内容
 	while (i < 1023 && (c=*(symname++)))
 		name_block->b_data[i++] = c;
 	name_block->b_data[i] = 0;
@@ -572,6 +649,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 	brelse(name_block);
 	inode->i_size = i;
 	inode->i_dirt = 1;
+	// 新增一个目录项
 	bh = minix_find_entry(dir,name,len,&de);
 	if (bh) {
 		inode->i_nlink--;
