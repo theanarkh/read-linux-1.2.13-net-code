@@ -118,7 +118,7 @@ static int ext_file_read(struct inode * inode, struct file * filp, char * buf, i
 	/*
 		偏移 + 要读的大小如果是整数倍x，则加BLOCK_SIZE-1,再除以BLOCK_SIZE_BITS还是整数倍x,
 		如果是整数倍x还多y字节，则加BLOCK_SIZE-1，再除以BLOCK_SIZE_BITS是整数倍x+1，
-		即算出要读的是第几块
+		即算出要读的最后一个字节是第几块
 	*/
 	blocks = (left + offset + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
 	bhb = bhe = buflist;

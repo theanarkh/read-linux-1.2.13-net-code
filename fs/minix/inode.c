@@ -33,9 +33,11 @@ void minix_put_inode(struct inode *inode)
 	minix_free_inode(inode);
 }
 
+// 回写超级块内容
 static void minix_commit_super (struct super_block * sb,
 			       struct minix_super_block * ms)
 {
+	// sb->u.minix_sb.s_sbh是管理该超级块的buffer 
 	mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	sb->s_dirt = 0;
 }
@@ -54,22 +56,27 @@ void minix_write_super (struct super_block * sb)
 	sb->s_dirt = 0;
 }
 
-
+// 回写超级块的内容 
 void minix_put_super(struct super_block *sb)
 {
 	int i;
-
+	// 加锁
 	lock_super(sb);
 	if (!(sb->s_flags & MS_RDONLY)) {
 		sb->u.minix_sb.s_ms->s_state = sb->u.minix_sb.s_mount_state;
 		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	}
+	// 置为0说明没有不在使用
 	sb->s_dev = 0;
+	// 回写inode位图信息
 	for(i = 0 ; i < MINIX_I_MAP_SLOTS ; i++)
 		brelse(sb->u.minix_sb.s_imap[i]);
+	// 回写块位图信息
 	for(i = 0 ; i < MINIX_Z_MAP_SLOTS ; i++)
 		brelse(sb->u.minix_sb.s_zmap[i]);
+	// 回写超级块其他字段
 	brelse (sb->u.minix_sb.s_sbh);
+	// 解锁
 	unlock_super(sb);
 	MOD_DEC_USE_COUNT;
 	return;
@@ -120,7 +127,7 @@ int minix_remount (struct super_block * sb, int * flags, char * data)
 	return 0;
 }
 
-
+// 读超级块
 struct super_block *minix_read_super(struct super_block *s,void *data, 
 				     int silent)
 {
@@ -133,34 +140,54 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 	MOD_INC_USE_COUNT;
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
+	// 读入超级块
 	if (!(bh = bread(dev,1,BLOCK_SIZE))) {
+		// 重置为未使用标记
 		s->s_dev=0;
 		unlock_super(s);
 		printk("MINIX-fs: unable to read superblock\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
+	// 转成minix类型的超级块类型
 	ms = (struct minix_super_block *) bh->b_data;
+	// s是vfs的通用结构体，minix_sb是存储超级块信息的结构，s_ms是保存minix类型超级块的结构
 	s->u.minix_sb.s_ms = ms;
+	// bh是管理该超级块的buffer
 	s->u.minix_sb.s_sbh = bh;
+	// 
 	s->u.minix_sb.s_mount_state = ms->s_state;
+	// 块大小
 	s->s_blocksize = 1024;
+	// 右移10位，用于算出第几块
 	s->s_blocksize_bits = 10;
+	// inode的个数
 	s->u.minix_sb.s_ninodes = ms->s_ninodes;
+	// 文件系统的总块数，包括数据块，保存元数据的块
 	s->u.minix_sb.s_nzones = ms->s_nzones;
+	// inode位图块数
 	s->u.minix_sb.s_imap_blocks = ms->s_imap_blocks;
+	// 数据块位图块数
 	s->u.minix_sb.s_zmap_blocks = ms->s_zmap_blocks;
+	// 第一个块在硬盘的位置
 	s->u.minix_sb.s_firstdatazone = ms->s_firstdatazone;
+	// 右移s_log_zone_size位得到每块的大小，区别于用于存储数据的块大小 
 	s->u.minix_sb.s_log_zone_size = ms->s_log_zone_size;
+	// 单文件最大字节数 
 	s->u.minix_sb.s_max_size = ms->s_max_size;
+	// 文件系统魔数
 	s->s_magic = ms->s_magic;
+	// minix系统的版本
 	if (s->s_magic == MINIX_SUPER_MAGIC) {
+		// 目录项结构体minix_dir_entry的大小，两个字节存inode号，14个存文件名
 		s->u.minix_sb.s_dirsize = 16;
+		// 文件名长度
 		s->u.minix_sb.s_namelen = 14;
 	} else if (s->s_magic == MINIX_SUPER_MAGIC2) {
 		s->u.minix_sb.s_dirsize = 32;
 		s->u.minix_sb.s_namelen = 30;
 	} else {
+		// 魔数不对
 		s->s_dev = 0;
 		unlock_super(s);
 		brelse(bh);
@@ -169,11 +196,13 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
+	// 初始化
 	for (i=0;i < MINIX_I_MAP_SLOTS;i++)
 		s->u.minix_sb.s_imap[i] = NULL;
 	for (i=0;i < MINIX_Z_MAP_SLOTS;i++)
 		s->u.minix_sb.s_zmap[i] = NULL;
 	block=2;
+	// 从第二块开始读，第一块保存超级块信息了，第二块起的n块保存块位图、inode位图
 	for (i=0 ; i < s->u.minix_sb.s_imap_blocks ; i++)
 		if ((s->u.minix_sb.s_imap[i]=bread(dev,block,BLOCK_SIZE)) != NULL)
 			block++;
@@ -184,6 +213,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 			block++;
 		else
 			break;
+	// 没有全部读成功，报错
 	if (block != 2+s->u.minix_sb.s_imap_blocks+s->u.minix_sb.s_zmap_blocks) {
 		for(i=0;i<MINIX_I_MAP_SLOTS;i++)
 			brelse(s->u.minix_sb.s_imap[i]);
@@ -196,13 +226,17 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
+	// 操作系统查找空闲项的时候，成功则返回第几项，失败则返回0，所以第0项不使用。否则返回0无法判断语义
 	set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
 	set_bit(0,s->u.minix_sb.s_zmap[0]->b_data);
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
+	// 操作超级块的函数集
 	s->s_op = &minix_sops;
+	// 获取第MINIX_ROOT_INO即第1个inode（第0个不用），第一个inode是根inode，即文件系统的起点
 	s->s_mounted = iget(s,MINIX_ROOT_INO);
+	// 获取失败则报错
 	if (!s->s_mounted) {
 		s->s_dev = 0;
 		brelse(bh);
@@ -223,7 +257,7 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 			"running fsck is recommended.\n");
 	return s;
 }
-
+// 显示minix文件系统的参数，块数、可用数、文件名长度等
 void minix_statfs(struct super_block *sb, struct statfs *buf)
 {
 	long tmp;
@@ -414,7 +448,7 @@ void minix_read_inode(struct inode * inode)
 	struct buffer_head * bh;
 	struct minix_inode * raw_inode;
 	int block, ino;
-
+	// inode号
 	ino = inode->i_ino;
 	inode->i_op = NULL;
 	inode->i_mode = 0;
@@ -423,16 +457,20 @@ void minix_read_inode(struct inode * inode)
 			inode->i_dev, ino);
 		return;
 	}
+	// 算出inode在硬盘的块号，imap是存储数据块位图相关的信息需要的空大小
 	block = 2 + inode->i_sb->u.minix_sb.s_imap_blocks +
 		    inode->i_sb->u.minix_sb.s_zmap_blocks +
 		    (ino-1)/MINIX_INODES_PER_BLOCK;
+	// 把整一块读进来
 	if (!(bh=bread(inode->i_dev,block, BLOCK_SIZE))) {
 		printk("Major problem: unable to read inode from dev 0x%04x\n",
 			inode->i_dev);
 		return;
 	}
+	// 算出inode在该块的块内偏移，得到inode的内容
 	raw_inode = ((struct minix_inode *) bh->b_data) +
 		    (ino-1)%MINIX_INODES_PER_BLOCK;
+	// 赋值过去
 	inode->i_mode = raw_inode->i_mode;
 	inode->i_uid = raw_inode->i_uid;
 	inode->i_gid = raw_inode->i_gid;
@@ -440,11 +478,15 @@ void minix_read_inode(struct inode * inode)
 	inode->i_size = raw_inode->i_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = raw_inode->i_time;
 	inode->i_blocks = inode->i_blksize = 0;
+	// 如果是字符或者块文件，i_zone[0]保存的是设备号
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = raw_inode->i_zone[0];
+	// 一般文件i_zone保存的是文件内容的块号
 	else for (block = 0; block < 9; block++)
 		inode->u.minix_i.i_data[block] = raw_inode->i_zone[block];
+	// 用完释放
 	brelse(bh);
+	// 根据文件类型赋值对应的操作函数集
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &minix_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))
@@ -492,6 +534,7 @@ static struct buffer_head * minix_update_inode(struct inode * inode)
 	else for (block = 0; block < 9; block++)
 		raw_inode->i_zone[block] = inode->u.minix_i.i_data[block];
 	inode->i_dirt=0;
+	// 回写inode内容到硬盘，上面的代码见read_inode注释
 	mark_buffer_dirty(bh, 1);
 	return bh;
 }
@@ -502,15 +545,17 @@ void minix_write_inode(struct inode * inode)
 	bh = minix_update_inode(inode);
 	brelse(bh);
 }
-
+// 回写inode到硬盘
 int minix_sync_inode(struct inode * inode)
 {
 	int err = 0;
 	struct buffer_head *bh;
-
+	// 回写
 	bh = minix_update_inode(inode);
+	// 上面的回写是等待线程定期回写的，失败的话自己调驱动层直接回写
 	if (bh && bh->b_dirt)
-	{
+	{	
+		// 驱动层会锁住buffer
 		ll_rw_block(WRITE, 1, &bh);
 		wait_on_buffer(bh);
 		if (bh->b_req && !bh->b_uptodate)
@@ -533,13 +578,14 @@ char kernel_version[] = UTS_RELEASE;
 static struct file_system_type minix_fs_type = {
 	minix_read_super, "minix", 1, NULL
 };
-
+// 支持以模块加载
 int init_module(void)
-{
+{	
+	// 注册文件系统
 	register_filesystem(&minix_fs_type);
 	return 0;
 }
-
+// 卸载模块
 void cleanup_module(void)
 {
 	unregister_filesystem(&minix_fs_type);
