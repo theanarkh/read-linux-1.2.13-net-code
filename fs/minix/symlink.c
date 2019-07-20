@@ -24,6 +24,7 @@ static int minix_follow_link(struct inode *, struct inode *, int, int, struct in
 /*
  * symlinks can't do much...
  */
+// 操作软链接文件的函数集，在新建软链接文件的时候赋值给inode结构体
 struct inode_operations minix_symlink_inode_operations = {
 	NULL,			/* no file-operations */
 	NULL,			/* create */

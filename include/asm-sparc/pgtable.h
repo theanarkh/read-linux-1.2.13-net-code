@@ -233,8 +233,10 @@ extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
 }
 
 /* Find an entry in the third-level page table.. */ 
+// 计算页表项的地址
 extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
 {
+	// 首先从页目录项中得到页表的地址，然后右移低12位后低12位是页表项地址。再&PTRS_PER_PTE - 1是保证屏蔽掉高于12位的值
 	return (pte_t *) pmd_page(*dir) + ((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1));
 }
 

@@ -46,7 +46,7 @@ static unsigned long count_used(struct buffer_head *map[], unsigned numblocks,
 	}
 	return(sum);
 }
-
+// 释放硬盘块
 void minix_free_block(struct super_block * sb, int block)
 {
 	struct buffer_head * bh;

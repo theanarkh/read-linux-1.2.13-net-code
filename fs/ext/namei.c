@@ -225,6 +225,7 @@ printk ("ext_add_entry: skipping to next block\n");
 				return NULL;
 			de = (struct ext_dir_entry *) bh->b_data;
 		}
+		// 超出了文件大小
 		if (offset >= dir->i_size) {
 			/* Check that the directory entry fits in the block */
 			if (offset % BLOCK_SIZE == 0  ||
@@ -250,6 +251,7 @@ printk ("ext_add_entry: skipping to next block\n");
 #ifdef EXTFS_DEBUG
 printk ("ext_add_entry : creating next block\n");
 #endif
+				// 1表示创建一个新的块
 				bh = ext_bread(dir,offset>>BLOCK_SIZE_BITS,1);
 				if (!bh)
 					return NULL; /* Other thing to do ??? */

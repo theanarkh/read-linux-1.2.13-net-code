@@ -28,8 +28,11 @@ void minix_put_inode(struct inode *inode)
 {
 	if (inode->i_nlink)
 		return;
+	// 文件大小变成0
 	inode->i_size = 0;
+	// 删除inode的内容
 	minix_truncate(inode);
+	// 释放inode节点，插入空闲队列
 	minix_free_inode(inode);
 }
 

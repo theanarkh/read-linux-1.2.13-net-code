@@ -26,38 +26,48 @@
  * The new code handles normal truncates (size = 0) as well as the more
  * general case (size = XXX). I hope.
  */
-
+// 删除inode的文件块到硬盘块的映射关系和回收硬盘的数据块（置数据块位图的对应位为0）
 static int trunc_direct(struct inode * inode)
 {
 	unsigned short * p;
 	struct buffer_head * bh;
 	int i, tmp;
 	int retry = 0;
+	// inode的大小对应的块数，+1023是因为不够一块的会占用一块
 #define DIRECT_BLOCK ((inode->i_size + 1023) >> 10)
 
 repeat:
+	// 这个函数只处理一级块，即前面7块
 	for (i = DIRECT_BLOCK ; i < 7 ; i++) {
+		// 保存文件块号到硬盘块号的映射
 		p = i + inode->u.minix_i.i_data;
+		// 无效则跳过
 		if (!(tmp = *p))
 			continue;
+		// 看是否在缓存中
 		bh = get_hash_table(inode->i_dev,tmp,BLOCK_SIZE);
 		if (i < DIRECT_BLOCK) {
 			brelse(bh);
 			goto repeat;
 		}
+		// 有多个进程在使用或者文件内容被修改了，因为get_hash_table可能会导致阻塞
 		if ((bh && bh->b_count != 1) || tmp != *p) {
+			// 告诉调用方需要重试
 			retry = 1;
 			brelse(bh);
 			continue;
 		}
+		// 清空映射关系，即删除了该块内容
 		*p = 0;
+		// inode的数据需要回写
 		inode->i_dirt = 1;
 		brelse(bh);
+		// 释放硬盘块
 		minix_free_block(inode->i_sb,tmp);
 	}
 	return retry;
 }
-
+// 处理二级块
 static int trunc_indirect(struct inode * inode, int offset, unsigned short * p)
 {
 	struct buffer_head * bh;

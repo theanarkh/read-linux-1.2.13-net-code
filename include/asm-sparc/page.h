@@ -9,13 +9,15 @@
 
 #include <asm/asi.h>        /* for get/set segmap/pte routines */
 #include <asm/contregs.h>   /* for switch_to_context */
-
+// 左移的位数，用来计算一页的大小
 #define PAGE_SHIFT   12             /* This is the virtual page... */
 
 #ifndef __ASSEMBLY__
+// UL是无符号长整型，4个字节。左移12位为4096.即一页大小是4kb
 #define PAGE_SIZE    (1UL << PAGE_SHIFT)
 
 /* to mask away the intra-page address bits */
+// 因为PAGE_SIZE是四个字节，00...1000...，减一变成00...011...，然后取反等于11..100...，即屏蔽掉低12位。得到一个地址
 #define PAGE_MASK         (~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__

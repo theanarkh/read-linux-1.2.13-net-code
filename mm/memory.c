@@ -61,7 +61,7 @@ struct mem_list free_area_list[NR_MEM_LISTS];
 unsigned char * free_area_map[NR_MEM_LISTS];
 
 #define copy_page(from,to) memcpy((void *) to, (void *) from, PAGE_SIZE)
-
+// 用户空间的最高级页目录项数，TASK_SIZE是用户空间的地址大小，PGDIR_SIZE是每一个最高级页目录项能管理的地址大小，这里是4M，算出共几个最高级目录项
 #define USER_PTRS_PER_PGD (TASK_SIZE / PGDIR_SIZE)
 
 mem_map_t * mem_map = NULL;
@@ -77,45 +77,55 @@ void oom(struct task_struct * task)
 	task->blocked &= ~(1<<(SIGKILL-1));
 	send_sig(SIGKILL,task,1);
 }
-
+// 释放一个页表项
 static inline void free_one_pte(pte_t * page_table)
 {
 	pte_t page = *page_table;
-
+	// 无效的页表项，直接返回
 	if (pte_none(page))
 		return;
+	// 清空页表项内容，值为0
 	pte_clear(page_table);
+	// 如果页表项映射了物理地址，即present为1.
 	if (!pte_present(page)) {
+		// 
 		swap_free(pte_val(page));
 		return;
 	}
+	// 释放物理地址,pte_page得到页表项里记录的物理地址 
 	free_page(pte_page(page));
 	return;
 }
-
+// 释放二级页目录项和对应的页表、页表项
 static inline void free_one_pmd(pmd_t * dir)
 {
 	int j;
 	pte_t * pte;
-
+	// 无效
 	if (pmd_none(*dir))
 		return;
+	
 	if (pmd_bad(*dir)) {
 		printk("free_one_pmd: bad directory entry %08lx\n", pmd_val(*dir));
 		pmd_clear(dir);
 		return;
 	}
+	// 得到整个页表的首地址，也是第一个页表项的地址 
 	pte = pte_offset(dir, 0);
+	// 清除页目录项内容
 	pmd_clear(dir);
+	//  如果还有其他进程使用，这时候pte_free只会对pte对应的物理内存引用数减一，并且不能释放页表里的页表项
 	if (pte_inuse(pte)) {
 		pte_free(pte);
 		return;
 	}
+	// 没有进程使用了，释放页表里每一个页表项
 	for (j = 0; j < PTRS_PER_PTE ; j++)
 		free_one_pte(pte+j);
+	// 释放页表，这时候会回收物理地址，因为没人使用了
 	pte_free(pte);
 }
-
+// 释放三级页目录项和相应的页表、页表项
 static inline void free_one_pgd(pgd_t * dir)
 {
 	int j;
@@ -128,14 +138,19 @@ static inline void free_one_pgd(pgd_t * dir)
 		pgd_clear(dir);
 		return;
 	}
+	// 取得pgd里保存的二级目录表首地址
 	pmd = pmd_offset(dir, 0);
+	// 清空pgd的内容
 	pgd_clear(dir);
+	// 如果pmd还有其他进程在使用，则pmd引用数减一即可
 	if (pmd_inuse(pmd)) {
 		pmd_free(pmd);
 		return;
 	}
+	// 否则释放每一个二级目录表、目录表保存的页表、页表项
 	for (j = 0; j < PTRS_PER_PMD ; j++)
 		free_one_pmd(pmd+j);
+	// 页目录表引用数减一
 	pmd_free(pmd);
 }
 	
@@ -147,6 +162,7 @@ static inline void free_one_pgd(pgd_t * dir)
  * page-table-tree in memory: it just removes the user pages. The two
  * functions are similar, but there is a fundamental difference.
  */
+// 释放用户空间的页目录、页表
 void clear_page_tables(struct task_struct * tsk)
 {
 	int i;
@@ -154,28 +170,37 @@ void clear_page_tables(struct task_struct * tsk)
 
 	if (!tsk)
 		return;
+	// 不能释放进程0的页表
 	if (tsk == task[0])
 		panic("task[0] (swapper) doesn't support exec()\n");
+	// 取得最高级页目录表的首地址
 	page_dir = pgd_offset(tsk, 0);
+	// 无效或者非法
 	if (!page_dir || page_dir == swapper_pg_dir) {
 		printk("%s trying to clear kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
+	// 还有进程在使用 
 	if (pgd_inuse(page_dir)) {
 		pgd_t * new_pg;
-
+		// 申请一页
 		if (!(new_pg = pgd_alloc())) {
 			oom(tsk);
 			return;
 		}
+		// 把用户空间的页表信息保存在新的页里
 		for (i = USER_PTRS_PER_PGD ; i < PTRS_PER_PGD ; i++)
 			new_pg[i] = page_dir[i];
+		// 更新当前进程的最高级页目录表地址到cr3
 		SET_PAGE_DIR(tsk, new_pg);
+		// 最高级页目录表对应物理地址引用数减一
 		pgd_free(page_dir);
 		return;
 	}
+	// 释放每一个最高级的页目录项
 	for (i = 0 ; i < USER_PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
+	// 刷新快表，使得对应的信息无效
 	invalidate();
 	return;
 }
@@ -183,6 +208,7 @@ void clear_page_tables(struct task_struct * tsk)
 /*
  * This function frees up all page tables of a process when it exits.
  */
+// 释放进程的所有页目录、页表
 void free_page_tables(struct task_struct * tsk)
 {
 	int i;
@@ -194,19 +220,25 @@ void free_page_tables(struct task_struct * tsk)
 		printk("task[0] (swapper) killed: unable to recover\n");
 		panic("Trying to free up swapper memory space");
 	}
+	// 最高级页目录表首地址
 	page_dir = pgd_offset(tsk, 0);
 	if (!page_dir || page_dir == swapper_pg_dir) {
 		printk("%s trying to free kernel page-directory: not good\n", tsk->comm);
 		return;
 	}
+	// 更新进程的cr3字段
 	SET_PAGE_DIR(tsk, swapper_pg_dir);
+	// 对应的物理地址还有其他进程使用，则引用数减一
 	if (pgd_inuse(page_dir)) {
 		pgd_free(page_dir);
 		return;
 	}
+	// 没有被使用了，释放全部页表信息
 	for (i = 0 ; i < PTRS_PER_PGD ; i++)
 		free_one_pgd(page_dir + i);
+	// 释放pgd对应的物理内存
 	pgd_free(page_dir);
+	// 刷新快表
 	invalidate();
 }
 
@@ -216,22 +248,26 @@ void free_page_tables(struct task_struct * tsk)
  * probably races in the memory management with cloning, but we'll
  * see..
  */
+// 复制页表信息
 int clone_page_tables(struct task_struct * tsk)
 {
 	pgd_t * pg_dir;
-
+	// 取得当前进程最高级页目录表的地址
 	pg_dir = pgd_offset(current, 0);
+	// 引用数加一 
 	pgd_reuse(pg_dir);
+	// 设置进程的cr3位新的页目录表地址
 	SET_PAGE_DIR(tsk, pg_dir);
 	return 0;
 }
-
+// 复制一个页表项
 static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 {
 	pte_t pte = *old_pte;
-
+	// 有效性判断
 	if (pte_none(pte))
 		return;
+	// 页表项没有映射到物理页
 	if (!pte_present(pte)) {
 		swap_duplicate(pte_val(pte));
 		*new_pte = pte;
@@ -241,6 +277,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 		*new_pte = pte;
 		return;
 	}
+	// 
 	if (pte_cow(pte))
 		pte = pte_wrprotect(pte);
 	if (delete_from_swap_cache(pte_page(pte)))
@@ -249,7 +286,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 	*old_pte = pte;
 	mem_map[MAP_NR(pte_page(pte))]++;
 }
-
+// 复制一个耳机页目录项
 static inline int copy_one_pmd(pmd_t * old_pmd, pmd_t * new_pmd)
 {
 	int j;
@@ -262,15 +299,21 @@ static inline int copy_one_pmd(pmd_t * old_pmd, pmd_t * new_pmd)
 		pmd_clear(old_pmd);
 		return 0;
 	}
+	// 取得该页目录项对应的页表首地址
 	old_pte = pte_offset(old_pmd, 0);
+	// 页表有其他进程使用
 	if (pte_inuse(old_pte)) {
+		// 引用数加一
 		pte_reuse(old_pte);
+		// 复制页表首地址到页目录项里
 		*new_pmd = *old_pmd;
 		return 0;
 	}
+	// 在页目录项中取得页表首地址，然后返回第一个页表项地址，如果new_pmd是空，则分配新的一个，new_pmd指向新页的地址
 	new_pte = pte_alloc(new_pmd, 0);
 	if (!new_pte)
 		return -ENOMEM;
+	// 复制每一个页表项，即复制页表
 	for (j = 0 ; j < PTRS_PER_PTE ; j++) {
 		copy_one_pte(old_pte, new_pte);
 		old_pte++;
@@ -278,7 +321,7 @@ static inline int copy_one_pmd(pmd_t * old_pmd, pmd_t * new_pmd)
 	}
 	return 0;
 }
-
+// 同上
 static inline int copy_one_pgd(pgd_t * old_pgd, pgd_t * new_pgd)
 {
 	int j;
@@ -315,17 +358,21 @@ static inline int copy_one_pgd(pgd_t * old_pgd, pgd_t * new_pgd)
  * note the special handling of RESERVED (ie kernel) pages, which
  * means that they are always shared by all processes.
  */
+// 复制页表信息
 int copy_page_tables(struct task_struct * tsk)
 {
 	int i;
 	pgd_t *old_pgd;
 	pgd_t *new_pgd;
-
+	// 分配一页
 	new_pgd = pgd_alloc();
 	if (!new_pgd)
 		return -ENOMEM;
+	// 设置进程的cr3字段，即最高级页目录表首地址
 	SET_PAGE_DIR(tsk, new_pgd);
+	// 取得当前进程的最高级页目录表首地址
 	old_pgd = pgd_offset(current, 0);
+	// 复制每一项
 	for (i = 0 ; i < PTRS_PER_PGD ; i++) {
 		int errno = copy_one_pgd(old_pgd, new_pgd);
 		if (errno) {
@@ -368,13 +415,19 @@ static inline void unmap_pte_range(pmd_t * pmd, unsigned long address, unsigned 
 		pmd_clear(pmd);
 		return;
 	}
+	// 取得address对应的页表项首地址,address是虚拟内存，里面保存了该页表项的偏移
 	pte = pte_offset(pmd, address);
+	// 取得物理页内偏移
 	address &= ~PMD_MASK;
+	// 物理地址的结束地址
 	end = address + size;
+	// 是否超出了该页目录项管理的内存大小
 	if (end >= PMD_SIZE)
 		end = PMD_SIZE;
 	do {
+		// 页表项内容
 		pte_t page = *pte;
+		// 清空
 		pte_clear(pte);
 		forget_pte(page);
 		address += PAGE_SIZE;
@@ -562,14 +615,17 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 /*
  * sanity-check function..
  */
+// 复制页表项内容
 static void put_page(pte_t * page_table, pte_t pte)
-{
+{	
+	// 页表项已经保存了映射信息
 	if (!pte_none(*page_table)) {
 		printk("put_page: page already exists %08lx\n", pte_val(*page_table));
 		free_page(pte_page(pte));
 		return;
 	}
 /* no need for invalidate */
+	// 复制
 	*page_table = pte;
 }
 
@@ -577,6 +633,7 @@ static void put_page(pte_t * page_table, pte_t pte)
  * This routine is used to map in a page into an address space: needed by
  * execve() for the initial stack and environment pages.
  */
+// address是虚拟地址，page是物理地址
 unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsigned long address)
 {
 	pgd_t * pgd;
@@ -585,21 +642,26 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 
 	if (page >= high_memory)
 		printk("put_dirty_page: trying to put page %08lx at %08lx\n",page,address);
+	// 该物理地址没有标记为使用，所以不能映射
 	if (mem_map[MAP_NR(page)] != 1)
 		printk("mem_map disagrees with %08lx at %08lx\n",page,address);
+	// 取得address对应的最高级目录表中的一个项
 	pgd = pgd_offset(tsk,address);
+	// 取得二级目录表中的某个项，即页表首地址，pgd为空则分配新页，pgd指向新页
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd) {
 		free_page(page);
 		oom(tsk);
 		return 0;
 	}
+	// 同上，取得一个页表项首地址
 	pte = pte_alloc(pmd, address);
 	if (!pte) {
 		free_page(page);
 		oom(tsk);
 		return 0;
 	}
+	// 页表项已经有信息了
 	if (!pte_none(*pte)) {
 		printk("put_dirty_page: page already exists\n");
 		pte_clear(pte);

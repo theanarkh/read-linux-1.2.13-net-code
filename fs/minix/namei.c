@@ -674,7 +674,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 	iput(inode);
 	return 0;
 }
-
+// 增加一个硬链接
 int minix_link(struct inode * oldinode, struct inode * dir, const char * name, int len)
 {
 	int error;
@@ -691,6 +691,7 @@ int minix_link(struct inode * oldinode, struct inode * dir, const char * name, i
 		iput(dir);
 		return -EMLINK;
 	}
+	// 去重
 	bh = minix_find_entry(dir,name,len,&de);
 	if (bh) {
 		brelse(bh);
@@ -698,16 +699,19 @@ int minix_link(struct inode * oldinode, struct inode * dir, const char * name, i
 		iput(oldinode);
 		return -EEXIST;
 	}
+	// 查找空闲目录项，de是新目录项地址
 	error = minix_add_entry(dir, name, len, &bh, &de);
 	if (error) {
 		iput(dir);
 		iput(oldinode);
 		return error;
 	}
+	// 保存inode号
 	de->inode = oldinode->i_ino;
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 	iput(dir);
+	// inode链接数减一，因为多了一个目录项指向他
 	oldinode->i_nlink++;
 	oldinode->i_ctime = CURRENT_TIME;
 	oldinode->i_dirt = 1;
@@ -723,6 +727,7 @@ static int subdir(struct inode * new_inode, struct inode * old_inode)
 	new_inode->i_count++;
 	result = 0;
 	for (;;) {
+		// 同一个节点算是子目录
 		if (new_inode == old_inode) {
 			result = 1;
 			break;
@@ -730,6 +735,7 @@ static int subdir(struct inode * new_inode, struct inode * old_inode)
 		if (new_inode->i_dev != old_inode->i_dev)
 			break;
 		ino = new_inode->i_ino;
+		// 判断
 		if (minix_lookup(new_inode,"..",2,&new_inode))
 			break;
 		if (new_inode->i_ino == ino)

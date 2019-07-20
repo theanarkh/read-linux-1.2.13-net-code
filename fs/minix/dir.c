@@ -70,33 +70,47 @@ static int minix_readdir(struct inode * inode, struct file * filp,
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 	struct minix_sb_info * info;
-
+	
 	if (!inode || !inode->i_sb || !S_ISDIR(inode->i_mode))
 		return -EBADF;
+	// minix超级块内容
 	info = &inode->i_sb->u.minix_sb;
+	// 要按目录项大小对齐
 	if (filp->f_pos & (info->s_dirsize - 1))
 		return -EBADF;
 	ret = 0;
+	// 还没找到并且小于文件大小
 	while (!ret && filp->f_pos < inode->i_size) {
+		// 取块内偏移
 		offset = filp->f_pos & 1023;
+		// 读取第n块内容,n=(filp->f_pos)>>BLOCK_SIZE_BITS
 		bh = minix_bread(inode,(filp->f_pos)>>BLOCK_SIZE_BITS,0);
+		// 读失败则跳过
 		if (!bh) {
 			filp->f_pos += 1024-offset;
 			continue;
 		}
+		// 还没找到并且还没读完这一块内容，并且还没到文件末尾
 		while (!ret && offset < 1024 && filp->f_pos < inode->i_size) {
+			// 指向目录项首地址
 			de = (struct minix_dir_entry *) (offset + bh->b_data);
+			// 下一个目录项首地址，是块内偏移
 			offset += info->s_dirsize;
+			// 更新总偏移
 			filp->f_pos += info->s_dirsize;
 retry:
+			// 有效的目录项，即inode号不为空
 			if (de->inode) {
 				version = inode->i_version;
+				// 文件名长度的最大值,复制到dirent
 				for (i = 0; i < info->s_namelen; i++)
 					if ((c = de->name[i]) != 0)
 						put_fs_byte(c,i+dirent->d_name);
 					else
 						break;
+				// 文件名长度大于0，即有效
 				if (i) {
+					// 复制inode号等信息
 					put_fs_long(de->inode,&dirent->d_ino);
 					put_fs_byte(0,i+dirent->d_name);
 					put_fs_word(i,&dirent->d_reclen);

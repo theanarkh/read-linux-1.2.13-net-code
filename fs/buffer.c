@@ -455,16 +455,17 @@ void set_blocksize(dev_t dev, int size)
 
 	if (!blksize_size[MAJOR(dev)])
 		return;
-
+	// 参数校验
 	switch(size) {
 		default: panic("Invalid blocksize passed to set_blocksize");
 		case 512: case 1024: case 2048: case 4096:;
 	}
-
+	
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {
 		blksize_size[MAJOR(dev)][MINOR(dev)] = size;
 		return;
 	}
+	// 和之前的值一样则不需要再设置
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == size)
 		return;
 	sync_buffers(dev, 2);

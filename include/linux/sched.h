@@ -319,9 +319,13 @@ extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wa
 							   next
 							|------->
 			p -> head -> node1 		node2
+							<-------
+								next	
 								next		next
 							|------->   |------->
 			p -> head -> node1 		node3    node2
+							<------------------
+								next
 			测试代码
 			#include <stdio.h>
 			struct wait_queue {

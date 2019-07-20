@@ -180,6 +180,7 @@ extern inline pte_t pte_mkclean(pte_t pte)	{ pte_val(pte) &= ~_PAGE_DIRTY; retur
 extern inline pte_t pte_mkold(pte_t pte)	{ pte_val(pte) &= ~_PAGE_ACCESSED; return pte; }
 extern inline pte_t pte_uncow(pte_t pte)	{ pte_val(pte) &= ~_PAGE_COW; return pte; }
 extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pte; }
+// user模式下读写位才有意义，内核可以任意读写。而页默认就是可读、可执行的，所以设置为user模式
 extern inline pte_t pte_mkread(pte_t pte)	{ pte_val(pte) |= _PAGE_USER; return pte; }
 extern inline pte_t pte_mkexec(pte_t pte)	{ pte_val(pte) |= _PAGE_USER; return pte; }
 extern inline pte_t pte_mkdirty(pte_t pte)	{ pte_val(pte) |= _PAGE_DIRTY; return pte; }
@@ -203,6 +204,7 @@ extern inline unsigned long pmd_page(pmd_t pmd)
 { return pmd_val(pmd) & PAGE_MASK; }
 
 /* to find an entry in a page-table-directory */
+// 取得进程的最高级页目录中某个页目录项的地址，首地址存在cr3里	
 extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
 {
 	return (pgd_t *) tsk->tss.cr3 + (address >> PGDIR_SHIFT);
