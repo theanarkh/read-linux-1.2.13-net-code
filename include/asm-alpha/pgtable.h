@@ -256,16 +256,20 @@ extern inline void pte_free_kernel(pte_t * pte)
 }
 
 extern inline pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
-{
+{	
+	// 得到页目录项偏移
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
+	// 还没有值
 	if (pmd_none(*pmd)) {
 		pte_t *page = (pte_t *) get_free_page(GFP_KERNEL);
 		if (pmd_none(*pmd)) {
 			if (page) {
+				// 把地址记录在页目录项中
 				pmd_set(pmd, page);
 				mem_map[MAP_NR(page)] = MAP_PAGE_RESERVED;
 				return page + address;
 			}
+			// 标记申请失败
 			pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
 			return NULL;
 		}
@@ -276,6 +280,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 		pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
 		return NULL;
 	}
+	// 页目录首地址+页目录偏移得到对应的页目录项地址，再加*，所以返回的是页表的首地址
 	return (pte_t *) pmd_page(*pmd) + address;
 }
 

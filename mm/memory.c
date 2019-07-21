@@ -633,7 +633,7 @@ static void put_page(pte_t * page_table, pte_t pte)
  * This routine is used to map in a page into an address space: needed by
  * execve() for the initial stack and environment pages.
  */
-// address是虚拟地址，page是物理地址
+// 把address对应的物理地址写入页表。address是虚拟地址，page是物理地址
 unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsigned long address)
 {
 	pgd_t * pgd;
@@ -667,6 +667,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
 		pte_clear(pte);
 		invalidate();
 	}
+	// 填充页表项里的内容，包括dirty，可读写执行，PAGE_COPY看定义
 	*pte = pte_mkwrite(pte_mkdirty(mk_pte(page, PAGE_COPY)));
 /* no need for invalidate */
 	return page;
@@ -689,6 +690,7 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
  * change only once the write actually happens. This avoids a few races,
  * and potentially makes it more efficient.
  */
+// 用户写多个进程共用的页时，需要申请一个新页，然后把旧页的数据复制过来，修改页表项
 void do_wp_page(struct vm_area_struct * vma, unsigned long address,
 	int write_access)
 {
@@ -696,49 +698,65 @@ void do_wp_page(struct vm_area_struct * vma, unsigned long address,
 	pmd_t *page_middle;
 	pte_t *page_table, pte;
 	unsigned long old_page, new_page;
-
+	// 获取一页物理页
 	new_page = __get_free_page(GFP_KERNEL);
+	// 获取进程最高级页目录项
 	page_dir = pgd_offset(vma->vm_task,address);
 	if (pgd_none(*page_dir))
 		goto end_wp_page;
 	if (pgd_bad(*page_dir))
 		goto bad_wp_pagedir;
+	// 获取对应的二级目录项
 	page_middle = pmd_offset(page_dir, address);
 	if (pmd_none(*page_middle))
 		goto end_wp_page;
 	if (pmd_bad(*page_middle))
 		goto bad_wp_pagemiddle;
+	// 获取页表项
 	page_table = pte_offset(page_middle, address);
 	pte = *page_table;
+	// 没有映射物理内存
 	if (!pte_present(pte))
 		goto end_wp_page;
+	// 可写，则不需要处理
 	if (pte_write(pte))
 		goto end_wp_page;
+	// 获取对应的物理地址 
 	old_page = pte_page(pte);
 	if (old_page >= high_memory)
 		goto bad_wp_page;
 	vma->vm_task->mm->min_flt++;
 	/*
 	 * Do we need to copy?
-	 */
+	 */ 
+	// 如果有多个进程在使用，则需要为执行写操作的进程，新增一个页表项，指向新页，如果只有一个进程在使用，则不需要
 	if (mem_map[MAP_NR(old_page)] != 1) {
 		if (new_page) {
 			if (mem_map[MAP_NR(old_page)] & MAP_PAGE_RESERVED)
 				++vma->vm_task->mm->rss;
+			// 把物理页里的内容复制到新页
 			copy_page(old_page,new_page);
+			// 标记新页可读写执行，dirty等
 			*page_table = pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot)));
+			// 老页引用数减一
 			free_page(old_page);
+			// 刷新快表
 			invalidate();
 			return;
 		}
+		// 申请新页失败，标记页表项为失败
 		*page_table = BAD_PAGE;
+		// 老页引用数减一
 		free_page(old_page);
 		oom(vma->vm_task);
 		invalidate();
 		return;
 	}
+	// 打标记
 	*page_table = pte_mkdirty(pte_mkwrite(pte));
+	// 刷新快表
 	invalidate();
+	// 释放申请的新页，因为没有用到
 	if (new_page)
 		free_page(new_page);
 	return;
@@ -840,16 +858,17 @@ check_wp_fault_by_hand:
 bad_area:
 	return -EFAULT;
 }
-
+// 获取一个新的物理页并记录到页表项里
 static inline void get_empty_page(struct vm_area_struct * vma, pte_t * page_table)
 {
 	unsigned long tmp;
-
+	// 申请失败则标记失败
 	if (!(tmp = get_free_page(GFP_KERNEL))) {
 		oom(vma->vm_task);
 		put_page(page_table, BAD_PAGE);
 		return;
 	}
+	// 建立虚拟地址到物理地址的映射
 	put_page(page_table, pte_mkwrite(mk_pte(tmp, vma->vm_page_prot)));
 }
 
@@ -869,9 +888,10 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 	pmd_t * from_middle, * to_middle;
 	pte_t * from_table, * to_table;
 	pte_t from, to;
-
+	// 获取最高级页目录项
 	from_dir = pgd_offset(from_area->vm_task,from_address);
 /* is there a page-directory at from? */
+	// 不存在
 	if (pgd_none(*from_dir))
 		return 0;
 	if (pgd_bad(*from_dir)) {
@@ -879,6 +899,7 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		pgd_clear(from_dir);
 		return 0;
 	}
+	// 获取二级页目录项
 	from_middle = pmd_offset(from_dir, from_address);
 /* is there a mid-directory at from? */
 	if (pmd_none(*from_middle))
@@ -888,15 +909,20 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		pmd_clear(from_middle);
 		return 0;
 	}
+	// 获取页表项
 	from_table = pte_offset(from_middle, from_address);
 	from = *from_table;
 /* is the page present? */
+	// 没有映射到物理地址
 	if (!pte_present(from))
 		return 0;
 /* if it is dirty it must be from a shared mapping to be shared */
+	// 脏页
 	if (pte_dirty(from)) {
+		// 这块内存不可共享
 		if (!(from_area->vm_flags & VM_SHARED))
 			return 0;
+		// 这块内存可写，不能分享
 		if (pte_write(from)) {
 			printk("nonwritable, but dirty, shared page\n");
 			return 0;
@@ -905,9 +931,11 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 /* is the page reasonable at all? */
 	if (pte_page(from) >= high_memory)
 		return 0;
+	// 物理地址是保留地址
 	if (mem_map[MAP_NR(pte_page(from))] & MAP_PAGE_RESERVED)
 		return 0;
 /* is the destination ok? */
+	// 目的地址是否有效，目的地址是需要共享这块内存的另一个进程
 	to_dir = pgd_offset(to_area->vm_task,to_address);
 /* is there a page-directory at to? */
 	if (pgd_none(*to_dir))
@@ -940,7 +968,9 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 				return 0;
 			}
 		}
+		// 复制物理页内容到新页
 		copy_page(pte_page(from), newpage);
+		// 修改页表项内容是新页的地址
 		*to_table = mk_pte(newpage, to_area->vm_page_prot);
 		return 1;
 	}
@@ -959,7 +989,9 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		*from_table = pte_mkdirty(from);
 		delete_from_swap_cache(pte_page(from));
 	}
+	// 物理地址引用数加一
 	mem_map[MAP_NR(pte_page(from))]++;
+	// 更新页表项
 	*to_table = mk_pte(pte_page(from), to_area->vm_page_prot);
 /* Check if we need to do anything at all to the 'from' field */
 	if (!pte_write(from))
@@ -1028,18 +1060,20 @@ static int share_page(struct vm_area_struct * area, unsigned long address,
 /*
  * fill in an empty page-table if none exists.
  */
+// 获取虚拟地址对应的页表项首地址
 static inline pte_t * get_empty_pgtable(struct task_struct * tsk,unsigned long address)
 {
 	pgd_t *pgd;
 	pmd_t *pmd;
 	pte_t *pte;
-
+	// 逐级获取页目录信息
 	pgd = pgd_offset(tsk, address);
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd) {
 		oom(tsk);
 		return NULL;
 	}
+	// 获取页表项
 	pte = pte_alloc(pmd, address);
 	if (!pte) {
 		oom(tsk);

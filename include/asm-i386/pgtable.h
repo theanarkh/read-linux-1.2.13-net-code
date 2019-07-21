@@ -37,6 +37,7 @@
  * area for the same reason. ;)
  */
 #define VMALLOC_OFFSET	(8*1024*1024)
+// 高端内存+8M
 #define VMALLOC_START ((high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) (TASK_SIZE + (unsigned long)(x))
 

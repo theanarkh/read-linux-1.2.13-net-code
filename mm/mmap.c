@@ -164,11 +164,12 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
  * For mmap() without MAP_FIXED and shmat() with addr=0.
  * Return value 0 means ENOMEM.
  */
+// 从已使用的空间中找一块长度为len的间隔，判断前一个节点的end和下一个节点的start是否大于长度len
 unsigned long get_unmapped_area(unsigned long len)
 {
 	struct vm_area_struct * vmm;
 	unsigned long gap_start = 0, gap_end;
-
+	// 遍历进程的mmap链表
 	for (vmm = current->mm->mmap; ; vmm = vmm->vm_next) {
 		if (gap_start < SHM_RANGE_START)
 			gap_start = SHM_RANGE_START;
@@ -194,6 +195,7 @@ asmlinkage int sys_mmap(unsigned long *buffer)
 	if (error)
 		return error;
 	flags = get_fs_long(buffer+3);
+	// 不是匿名映射，则判断文件的合法性
 	if (!(flags & MAP_ANONYMOUS)) {
 		unsigned long fd = get_fs_long(buffer+4);
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
@@ -239,6 +241,7 @@ asmlinkage int sys_mmap(unsigned long *buffer)
  */
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
+// 判断地址addr属于哪个vm_area_struct
 struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
 {
 #if 0 /* equivalent, but slow */
@@ -251,15 +254,20 @@ struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)
 			return vma;
 	}
 #else
+	// 遍历左子树的时候，result记录父节点，如果左子树为空，则返回父节点
 	struct vm_area_struct * result = NULL;
 	struct vm_area_struct * tree;
-
+	// 遍历avl树
 	for (tree = task->mm->mmap_avl ; ; ) {
+		// 到叶子了，返回
 		if (tree == avl_empty)
 			return result;
+		// 大于当前节点则往右子树走，否则走左子树
 		if (tree->vm_end > addr) {
+			// 如果成立，说明addr在当前节点范围，返回
 			if (tree->vm_start <= addr)
 				return tree;
+			// 否则记录当前节点，继续判断左子树，如果为空，则返回父节点
 			result = tree;
 			tree = tree->vm_avl_left;
 		} else
