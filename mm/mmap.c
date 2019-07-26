@@ -25,17 +25,17 @@ static int anon_map(struct inode *, struct file *, struct vm_area_struct *);
  * behavior is in parens:
  *
  * map_type	prot
- *		PROT_NONE	PROT_READ	PROT_WRITE	PROT_EXEC
- * MAP_SHARED	r: (no) no	r: (yes) yes	r: (no) yes	r: (no) yes
- *		w: (no) no	w: (no) no	w: (yes) yes	w: (no) no
- *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
- *		
- * MAP_PRIVATE	r: (no) no	r: (yes) yes	r: (no) yes	r: (no) yes
- *		w: (no) no	w: (no) no	w: (copy) copy	w: (no) no
- *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
+ *				PROT_NONE	PROT_READ		PROT_WRITE		PROT_EXEC
+ * MAP_SHARED	r: (no) no	r: (yes) yes	r: (no) yes		r: (no) yes
+		*		w: (no) no	w: (no) no		w: (yes) yes	w: (no) no
+		*		x: (no) no	x: (no) yes		x: (no) yes		x: (yes) yes
+ *			
+ * MAP_PRIVATE	r: (no) no	r: (yes) yes	r: (no) yes		r: (no) yes
+		*		w: (no) no	w: (no) no		w: (copy) copy	w: (no) no
+		*		x: (no) no	x: (no) yes		x: (no) yes		x: (yes) yes
  *
  */
-
+// p表示私有，s表示共享，对应的值和权限如上图，括号里表示这一位有没有设置，后面的一列说明有没有对应的权限，设置多位取并集
 pgprot_t protection_map[16] = {
 	__P000, __P001, __P010, __P011, __P100, __P101, __P110, __P111,
 	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
@@ -64,12 +64,17 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 */
 
 	if (file != NULL) {
+		// 映射文件的方式
 		switch (flags & MAP_TYPE) {
+		// 共享，每个进程都可见，并且修改会同步到硬盘
 		case MAP_SHARED:
+			// 设置了写，但是文件不可写则报错，如果是共享只读是可以的
 			if ((prot & PROT_WRITE) && !(file->f_mode & 2))
 				return -EACCES;
 			/* fall through */
+		// 私有映射，修改文件不会同步到硬盘
 		case MAP_PRIVATE:
+			// 不可读
 			if (!(file->f_mode & 1))
 				return -EACCES;
 			break;
@@ -77,22 +82,26 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		default:
 			return -EINVAL;
 		}
+		// 禁止写但是写者大于1，该标记已废弃
 		if ((flags & MAP_DENYWRITE) && (file->f_inode->i_wcount > 0))
 			return -ETXTBSY;
-	} else if ((flags & MAP_TYPE) != MAP_PRIVATE)
+	} else if ((flags & MAP_TYPE) != MAP_PRIVATE) // 匿名映射需要是私有映射，匿名无法共享
 		return -EINVAL;
 
 	/*
 	 * obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
 	 */
-
+	// 映射的地址一定是addr
 	if (flags & MAP_FIXED) {
+		// 不是页对齐
 		if (addr & ~PAGE_MASK)
 			return -EINVAL;
+		// 
 		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -EINVAL;
 	} else {
+		// 获取一个没使用的vma
 		addr = get_unmapped_area(len);
 		if (!addr)
 			return -ENOMEM;
@@ -105,21 +114,25 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 */
 	if (file && (!file->f_op || !file->f_op->mmap))
 		return -ENODEV;
-
+	// 申请一个vma
 	vma = (struct vm_area_struct *)kmalloc(sizeof(struct vm_area_struct),
 		GFP_KERNEL);
 	if (!vma)
 		return -ENOMEM;
 
 	vma->vm_task = current;
+	// 记录vma管理的地址
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
+	// 默认可读写执行
 	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
 	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE | VM_EXECUTABLE);
-
+	// 文件映射
 	if (file) {
+		// 可读
 		if (file->f_mode & 1)
 			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+		// 共享
 		if (flags & MAP_SHARED) {
 			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
 			/*
@@ -132,17 +145,19 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			 * We leave the VM_MAYSHARE bit on, just to get correct output
 			 * from /proc/xxx/maps..
 			 */
+			// 文件不可写，设置vma属性为不可写，不能共享
 			if (!(file->f_mode & 2))
 				vma->vm_flags &= ~(VM_MAYWRITE | VM_SHARED);
 		}
 	} else
+	// 匿名映射默认属性
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
 	vma->vm_offset = off;
 	vma->vm_inode = NULL;
 	vma->vm_pte = 0;
-
+	// 建立映射
 	do_munmap(addr, len);	/* Clear old maps */
 
 	if (file)

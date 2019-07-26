@@ -35,16 +35,20 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	unsigned int block;
 	int nr[8];
 	int i, *p;
-
+	// 屏蔽掉低12位 
 	address &= PAGE_MASK;
 	block = address - area->vm_start + area->vm_offset;
+	// 算出是文件中的第几块
 	block >>= inode->i_sb->s_blocksize_bits;
+	// 一页包括多少块
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	p = nr;
 	do {
+		// 算出当前块对应的硬盘块号，存在p中，即nr数组中
 		*p = bmap(inode,block);
 		i--;
 		block++;
+		// 指向数组下一个元素的地址
 		p++;
 	} while (i > 0);
 	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
@@ -244,9 +248,10 @@ static struct vm_operations_struct file_private_mmap = {
 int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
 	struct vm_operations_struct * ops;
-
+	// 没有按文件系统的块大小对齐
 	if (vma->vm_offset & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
+	// 没有超级块或者不是一般文件
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->bmap)
@@ -267,8 +272,11 @@ int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
+	// 建立文件和vma的关系
 	vma->vm_inode = inode;
+	// inode引用数加一
 	inode->i_count++;
+	// 设置操作函数集
 	vma->vm_ops = ops;
 	return 0;
 }

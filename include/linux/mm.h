@@ -63,7 +63,7 @@ struct vm_area_struct {
 #define VM_WRITE	0x0002
 #define VM_EXEC		0x0004
 #define VM_SHARED	0x0008
-
+// VM_READ 标志可被设置
 #define VM_MAYREAD	0x0010	/* limits for mprotect() etc */
 #define VM_MAYWRITE	0x0020
 #define VM_MAYEXEC	0x0040

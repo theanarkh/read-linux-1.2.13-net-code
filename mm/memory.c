@@ -547,13 +547,14 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 	unsigned long offset, pgprot_t prot)
 {
 	unsigned long end;
-
+	// 取得页目录项内的地址范围
 	address &= ~PMD_MASK;
 	end = address + size;
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
 		pte_t oldpage = *pte;
+		// 清空页表项
 		pte_clear(pte);
 		if (offset >= high_memory || (mem_map[MAP_NR(offset)] & MAP_PAGE_RESERVED))
 			*pte = mk_pte(offset, prot);
@@ -1116,21 +1117,28 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	pte_t * page_table;
 	pte_t entry;
 	unsigned long page;
-
+	// 在进程页表里获取address对应的页表项地址
 	page_table = get_empty_pgtable(vma->vm_task,address);
+	// 分配失败则返回
 	if (!page_table)
 		return;
 	entry = *page_table;
+	// 已经建立了虚拟地址到物理地址的映射，返回
 	if (pte_present(entry))
 		return;
+	// 还没有建立映射
 	if (!pte_none(entry)) {
 		do_swap_page(vma, address, page_table, entry, write_access);
 		return;
 	}
+	// 屏蔽低12位，得到真正虚拟地址
 	address &= PAGE_MASK;
 	if (!vma->vm_ops || !vma->vm_ops->nopage) {
+		// 常驻内存集大小加一
 		++vma->vm_task->mm->rss;
+		// 缺页次数加一
 		++vma->vm_task->mm->min_flt;
+		// 获取一个物理页并且把物理页地址写到页表项page_table中
 		get_empty_page(vma, page_table);
 		return;
 	}

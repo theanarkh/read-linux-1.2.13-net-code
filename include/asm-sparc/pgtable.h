@@ -221,6 +221,7 @@ extern inline void pgd_set(pgd_t * pgdp, pte_t * ptep)
 ((((unsigned long)(address)) >> 22) + (pgd_t *) (tsk)->tss.cr3)
 
 /* to find an entry in a page-table-directory */
+// 返回某页目录项地址
 extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
 {
 	return (pgd_t *) tsk->tss.cr3 + (address >> PGDIR_SHIFT);

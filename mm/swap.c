@@ -95,11 +95,13 @@ static unsigned long init_swap_cache(unsigned long mem_start,
 	unsigned long mem_end)
 {
 	unsigned long swap_cache_size;
-
+	// 16字节对齐
 	mem_start = (mem_start + 15) & ~15;
 	swap_cache = (unsigned long *) mem_start;
+	// 多少页
 	swap_cache_size = MAP_NR(mem_end);
 	memset(swap_cache, 0, swap_cache_size * sizeof (unsigned long));
+	// 返回末地址
 	return (unsigned long) (swap_cache + swap_cache_size);
 }
 
@@ -280,7 +282,7 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 	unsigned long entry, int write_access)
 {
 	unsigned long page = get_free_page(GFP_KERNEL);
-
+	// entry对应的地址不等于页表项里记录的值，则返回，说明不在里面
 	if (pte_val(*page_table) != entry) {
 		free_page(page);
 		return;
