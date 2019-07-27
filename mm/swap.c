@@ -1214,21 +1214,30 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 	if (i < 16)
 		i = 16;
 	min_free_pages = i;
+	// 腾出一块给交换区使用
 	start_mem = init_swap_cache(start_mem, end_mem);
 	mem_map = (mem_map_t *) start_mem;
+	// 再腾出一块给mem_map使用。p指向数组的最后一个元素。
 	p = mem_map + MAP_NR(end_mem);
+	// 新的开始地址
 	start_mem = (unsigned long) p;
+	// 初始化mem_map数组，标记是保留页面，--p是因为p指向数组的末尾，而不是最后一个元素的地址
 	while (p > mem_map)
 		*--p = MAP_PAGE_RESERVED;
 
 	for (i = 0 ; i < NR_MEM_LISTS ; i++) {
 		unsigned long bitmap_size;
+		// 初始化结构体的前后指针指向自己
 		free_area_list[i].prev = free_area_list[i].next = &free_area_list[i];
 		mask += mask;
+		// end_mem页对齐，不够一页的，补足一页
 		end_mem = (end_mem + ~mask) & mask;
 		bitmap_size = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT + i);
+		// 8位对齐，不够则补足
 		bitmap_size = (bitmap_size + 7) >> 3;
+		// sizeof(unsigned long) - 1)对齐，不够则补足 
 		bitmap_size = (bitmap_size + sizeof(unsigned long) - 1) & ~(sizeof(unsigned long)-1);
+		// 再腾出一部分空间给free_area_map，他是个char *数组。有bitmap_size * 8个比特。每一个比特管理一个东西
 		free_area_map[i] = (unsigned char *) start_mem;
 		memset((void *) start_mem, 0, bitmap_size);
 		start_mem += bitmap_size;
