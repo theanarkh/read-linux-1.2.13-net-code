@@ -46,10 +46,10 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 {
 	int error;
 	struct vm_area_struct * vma;
-
+	// 长度为0
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
-
+	// 开始地址或结束地址不在用户空间
 	if (addr > TASK_SIZE || len > TASK_SIZE || addr > TASK_SIZE-len)
 		return -EINVAL;
 
@@ -62,7 +62,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 * to. we assume access permissions have been handled by the open
 	 * of the memory object, so we don't do any here.
 	 */
-
+	// 文件映射
 	if (file != NULL) {
 		// 映射文件的方式
 		switch (flags & MAP_TYPE) {
@@ -101,7 +101,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -EINVAL;
 	} else {
-		// 获取一个没使用的vma
+		// 获取一个没使用的地址，由vma管理
 		addr = get_unmapped_area(len);
 		if (!addr)
 			return -ENOMEM;
@@ -124,16 +124,19 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	// 记录vma管理的地址
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	// 默认可读写执行
+	// 设置读写执行标记的值
 	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
+	// 设置其他标记的值
 	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE | VM_EXECUTABLE);
 	// 文件映射
 	if (file) {
 		// 可读
 		if (file->f_mode & 1)
+			// 可以修改读写执行位
 			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 		// 共享
 		if (flags & MAP_SHARED) {
+			// 设置共享位，并且设置可以修改共享位
 			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
 			/*
 			 * This looks strange, but when we don't have the file open
@@ -152,23 +155,28 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	} else
 	// 匿名映射默认属性
 		vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+	// 用户层到页表项层的格式转换
 	vma->vm_page_prot = protection_map[vma->vm_flags & 0x0f];
 	vma->vm_ops = NULL;
+	// 文件映射的话，说明从文件偏移off出开始映射，即对于vma的start
 	vma->vm_offset = off;
+	// 初始化为NULL，在文件系统的mmap函数可以设置
 	vma->vm_inode = NULL;
 	vma->vm_pte = 0;
-	// 建立映射
+	// 解除旧的映射
 	do_munmap(addr, len);	/* Clear old maps */
-
+	// 调用文件系统的mmap
 	if (file)
 		error = file->f_op->mmap(file->f_inode, file, vma);
 	else
+		// 匿名映射
 		error = anon_map(NULL, NULL, vma);
 	
 	if (error) {
 		kfree(vma);
 		return error;
 	}
+	// 插入新的vma到链表和avl树
 	insert_vm_struct(current, vma);
 	merge_segments(current, vma->vm_start, vma->vm_end);
 	return addr;

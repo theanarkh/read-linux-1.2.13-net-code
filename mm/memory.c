@@ -386,20 +386,25 @@ int copy_page_tables(struct task_struct * tsk)
 	invalidate();
 	return 0;
 }
-
+// 释放页表项对应虚拟地址的物理页
 static inline void forget_pte(pte_t page)
 {
 	if (pte_none(page))
 		return;
+	// 页表项映射了物理内存
 	if (pte_present(page)) {
+		// 物理页引用数减一
 		free_page(pte_page(page));
+		// 是保留页则直接返回
 		if (mem_map[MAP_NR(pte_page(page))] & MAP_PAGE_RESERVED)
 			return;
 		if (current->mm->rss <= 0)
 			return;
+		// 进程驻留内存的页数减一
 		current->mm->rss--;
 		return;
 	}
+	// 释放交换区
 	swap_free(pte_val(page));
 }
 
@@ -477,24 +482,29 @@ int unmap_page_range(unsigned long address, unsigned long size)
 	invalidate();
 	return 0;
 }
-
+// 重新设置address到address+size地址范围内的页表项的内容，释放旧的物理地址
 static inline void zeromap_pte_range(pte_t * pte, unsigned long address, unsigned long size, pte_t zero_pte)
 {
 	unsigned long end;
-
+	// 屏蔽高位	
 	address &= ~PMD_MASK;
+	// 末地址
 	end = address + size;
+	// 末地址是否超过了该页目录项管理的地址范围
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
 		pte_t oldpage = *pte;
+		// 设置页表项的新内容
 		*pte = zero_pte;
+		// 释放旧的物理页
 		forget_pte(oldpage);
+		// 下一个页表项
 		address += PAGE_SIZE;
 		pte++;
 	} while (address < end);
 }
-
+// 重新设置address到address+size地址范围内的页目录项内容，释放旧的物理页
 static inline int zeromap_pmd_range(pmd_t * pmd, unsigned long address, unsigned long size, pte_t zero_pte)
 {
 	unsigned long end;
@@ -507,22 +517,25 @@ static inline int zeromap_pmd_range(pmd_t * pmd, unsigned long address, unsigned
 		pte_t * pte = pte_alloc(pmd, address);
 		if (!pte)
 			return -ENOMEM;
+		// 重新设置一个页目录项的内容和释放物理页
 		zeromap_pte_range(pte, address, end - address, zero_pte);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
 	return 0;
 }
-
+// 设置address到address+size地址范围内的页目录、页表内容 
 int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 {
 	int error = 0;
 	pgd_t * dir;
 	unsigned long end = address + size;
 	pte_t zero_pte;
-
+	// 新的页表项，设置写保护,ZERO_PAGE is a global shared page that is always zero
 	zero_pte = pte_wrprotect(mk_pte(ZERO_PAGE, prot));
+	// 取得最高级页目录项的地址
 	dir = pgd_offset(current, address);
+	// 设置地址范围内的页目录、页表内容为zero_pte
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc(dir, address);
 		error = -ENOMEM;
@@ -531,9 +544,11 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 		error = zeromap_pmd_range(pmd, address, end - address, zero_pte);
 		if (error)
 			break;
+		// 下一个最高级页目录项
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
+	// 刷新快表
 	invalidate();
 	return error;
 }
@@ -1133,6 +1148,7 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	}
 	// 屏蔽低12位，得到真正虚拟地址
 	address &= PAGE_MASK;
+	// 没有no_page说明不是文件mmap
 	if (!vma->vm_ops || !vma->vm_ops->nopage) {
 		// 常驻内存集大小加一
 		++vma->vm_task->mm->rss;
@@ -1142,9 +1158,13 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 		get_empty_page(vma, page_table);
 		return;
 	}
+	// 申请一页
 	page = get_free_page(GFP_KERNEL);
+	// 判断是否已经加载过这个页面的数据
 	if (share_page(vma, address, write_access, page)) {
+		// 缺页但是不需要从硬盘加载数据，min_flt加一
 		++vma->vm_task->mm->min_flt;
+		// 常驻内存页数加一
 		++vma->vm_task->mm->rss;
 		return;
 	}
@@ -1153,13 +1173,16 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 		put_page(page_table, BAD_PAGE);
 		return;
 	}
+	// 缺页并且需要从硬盘加载数据，maj_flt次数加一 
 	++vma->vm_task->mm->maj_flt;
+	// 常驻内存页数加一
 	++vma->vm_task->mm->rss;
 	/*
 	 * The fourth argument is "no_share", which tells the low-level code
 	 * to copy, not share the page even if sharing is possible.  It's
 	 * essentially an early COW detection 
 	 */
+	// 调文件系统的no_page函数，该函数在filemap.c中，address是虚拟地址，page是物理地址
 	page = vma->vm_ops->nopage(vma, address, page,
 		write_access && !(vma->vm_flags & VM_SHARED));
 	if (share_page(vma, address, write_access, 0)) {
@@ -1176,11 +1199,14 @@ void do_no_page(struct vm_area_struct * vma, unsigned long address,
 	 * so we can make it writable and dirty to avoid having to
 	 * handle that later.
 	 */
+	// 新建一个页表项，page是物理地址
 	entry = mk_pte(page, vma->vm_page_prot);
+	// 设置写保护或者可写
 	if (write_access) {
 		entry = pte_mkwrite(pte_mkdirty(entry));
 	} else if (mem_map[MAP_NR(page)] > 1 && !(vma->vm_flags & VM_SHARED))
 		entry = pte_wrprotect(entry);
+	// 把物理地址和相关信息写入页表项
 	put_page(page_table, entry);
 }
 

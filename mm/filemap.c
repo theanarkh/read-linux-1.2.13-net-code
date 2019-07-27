@@ -37,20 +37,24 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	int i, *p;
 	// 屏蔽掉低12位 
 	address &= PAGE_MASK;
+	// vm_offset代表文件从该处开始被映射，对于vm_start的值，所以算出相对的块大小，还有加上偏移，得到绝对大小
 	block = address - area->vm_start + area->vm_offset;
 	// 算出是文件中的第几块
 	block >>= inode->i_sb->s_blocksize_bits;
-	// 一页包括多少块
+	// 一页包括多少块，即读进来的数据要是页的整数倍，假设是2，则至少要读两块
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	p = nr;
 	do {
 		// 算出当前块对应的硬盘块号，存在p中，即nr数组中
 		*p = bmap(inode,block);
+		// 一页包括多少块则多读多少块，即循环多少次
 		i--;
+		// 需要读的下一块块号
 		block++;
 		// 指向数组下一个元素的地址
 		p++;
 	} while (i > 0);
+	// 把内容读到page中，page是物理地址
 	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
 }
 
@@ -256,7 +260,9 @@ int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->bmap)
 		return -ENOEXEC;
+	// 私有映射
 	ops = &file_private_mmap;
+	// 共享映射
 	if (vma->vm_flags & VM_SHARED) {
 		if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE)) {
 			static int nr = 0;
