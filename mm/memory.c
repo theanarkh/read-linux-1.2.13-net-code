@@ -286,7 +286,7 @@ static inline void copy_one_pte(pte_t * old_pte, pte_t * new_pte)
 	*old_pte = pte;
 	mem_map[MAP_NR(pte_page(pte))]++;
 }
-// 复制一个耳机页目录项
+// 复制一个二级页目录项
 static inline int copy_one_pmd(pmd_t * old_pmd, pmd_t * new_pmd)
 {
 	int j;

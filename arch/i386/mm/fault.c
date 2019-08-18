@@ -39,7 +39,9 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	unsigned long page;
 
 	/* get the address */
+	// cr2保存的是当前缺页的虚拟地址，赋值给address
 	__asm__("movl %%cr2,%0":"=r" (address));
+	// 找出address对应的vma
 	vma = find_vma(current, address);
 	if (!vma)
 		goto bad_area;
