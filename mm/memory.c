@@ -558,32 +558,39 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
  * mappings are removed. any references to nonexistent pages results
  * in null mappings (currently treated as "copy-on-access")
  */
+// 把物理地址offset保存到页表项中，prot为属性，size是保存连续的多页物理地址到多个页表项中
 static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned long size,
 	unsigned long offset, pgprot_t prot)
 {
 	unsigned long end;
 	// 取得页目录项内的地址范围
 	address &= ~PMD_MASK;
+	// 末虚拟地址
 	end = address + size;
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
 	do {
+		// 先保存旧的数据
 		pte_t oldpage = *pte;
-		// 清空页表项
+		// 清空页表项内容
 		pte_clear(pte);
+		// 把物理地址保存到页表项
 		if (offset >= high_memory || (mem_map[MAP_NR(offset)] & MAP_PAGE_RESERVED))
 			*pte = mk_pte(offset, prot);
 		else if (mem_map[MAP_NR(offset)]) {
 			mem_map[MAP_NR(offset)]++;
 			*pte = mk_pte(offset, prot);
 		}
+		// 释放老数据
 		forget_pte(oldpage);
+		// 下一个虚拟地址
 		address += PAGE_SIZE;
+		// 下一个物理地址
 		offset += PAGE_SIZE;
 		pte++;
 	} while (address < end);
 }
-
+// 保存多个连续的物理地址到多个页目录项的1024页表项中
 static inline int remap_pmd_range(pmd_t * pmd, unsigned long address, unsigned long size,
 	unsigned long offset, pgprot_t prot)
 {
@@ -595,16 +602,20 @@ static inline int remap_pmd_range(pmd_t * pmd, unsigned long address, unsigned l
 		end = PGDIR_SIZE;
 	offset -= address;
 	do {
+		// 根据虚拟地址算出页表项在页目录项的位置
 		pte_t * pte = pte_alloc(pmd, address);
 		if (!pte)
 			return -ENOMEM;
+		// 逐个页表项处理
 		remap_pte_range(pte, address, end - address, address + offset, prot);
 		address = (address + PMD_SIZE) & PMD_MASK;
+		// 下一个页目录项
 		pmd++;
 	} while (address < end);
 	return 0;
 }
 
+// 同上
 int remap_page_range(unsigned long from, unsigned long offset, unsigned long size, pgprot_t prot)
 {
 	int error = 0;
