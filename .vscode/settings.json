@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "minix_fs.h": "c",
+        "netdevice.h": "c",
+        "etherdevice.h": "c",
+        "malloc.h": "c"
+    }
+}

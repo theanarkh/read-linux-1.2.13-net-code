@@ -77,20 +77,23 @@ static int findkey (key_t key)
 static int newseg (key_t key, int shmflg, int size)
 {
 	struct shmid_ds *shp;
-	// 字节数/页大小=页数
+	// 字节数/页大小=页数，PAGE_SIZE -1表示不够一页则补足一页
 	int numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT;
 	int id, i;
 	// 校验
 	if (size < SHMMIN)
 		return -EINVAL;
+	// 查过共享内存的总大小
 	if (shm_tot + numpages >= SHMALL)
 		return -ENOSPC;
+	// 找一个可用的结构体
 	for (id = 0; id < SHMMNI; id++)
 		if (shm_segs[id] == IPC_UNUSED) {
-			// 设置等待分配内存标记
+			// 有可用的结构体，设置等待分配内存标记
 			shm_segs[id] = (struct shmid_ds *) IPC_NOID;
 			goto found;
 		}
+	// 没有可用的结构体了
 	return -ENOSPC;
 
 found:
@@ -103,8 +106,9 @@ found:
 			wake_up (&shm_lock);
 		return -ENOMEM;
 	}
-	// 分配一个指针数组，数组元素指向共享的物理内存
+	// 分配内存
 	shp->shm_pages = (ulong *) kmalloc (numpages*sizeof(ulong),GFP_KERNEL);
+	// 同上
 	if (!shp->shm_pages) {
 		shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 		if (shm_lock)
@@ -118,6 +122,7 @@ found:
 	shm_tot += numpages;
 	shp->shm_perm.key = key;
 	shp->shm_perm.mode = (shmflg & S_IRWXUGO);
+	// 这里是等于euid，而不是uid
 	shp->shm_perm.cuid = shp->shm_perm.uid = current->euid;
 	shp->shm_perm.cgid = shp->shm_perm.gid = current->egid;
 	shp->shm_perm.seq = shm_seq;
@@ -148,13 +153,13 @@ int sys_shmget (key_t key, int size, int shmflg)
 {
 	struct shmid_ds *shp;
 	int id = 0;
-	
+	// 最大能共享的内存大小
 	if (size < 0 || size > SHMMAX)
 		return -EINVAL;
 	//设置了IPC_PRIVATE直接创建一个新的 
 	if (key == IPC_PRIVATE)
 		return newseg(key, shmflg, size);
-	// 找不到key对应的数据
+	// 否则根据key查找
 	if ((id = findkey (key)) == -1) {
 		// 找不到也没有设置IPC_CREAT标记则返回不存在
 		if (!(shmflg & IPC_CREAT))
@@ -189,15 +194,18 @@ static void killseg (int id)
 	int i, numpages;
 
 	shp = shm_segs[id];
+	// 无效
 	if (shp == IPC_NOID || shp == IPC_UNUSED) {
 		printk ("shm nono: killseg called on unused seg id=%d\n", id);
 		return;
 	}
+	// 该结构体已被销毁，被重用的时候，返回给用户层的id不一样的，seq需要加一，否则会导致重用时候，id和上次的一样
 	shp->shm_perm.seq++;     /* for shmat */
 	shm_seq = (shm_seq+1) % ((unsigned)(1<<31)/SHMMNI); /* increment, but avoid overflow */
 	shm_segs[id] = (struct shmid_ds *) IPC_UNUSED;
 	used_segs--;
 	if (id == max_shmid)
+		// 前面的可能也被销毁了，则max_shmid往前移
 		while (max_shmid && (shm_segs[--max_shmid] == IPC_UNUSED));
 	if (!shp->shm_pages) {
 		printk ("shm nono: killseg shp->pages=NULL. id=%d\n", id);
@@ -210,6 +218,7 @@ static void killseg (int id)
 		if (pte_none(pte))
 			continue;
 		if (pte_present(pte)) {
+			// 释放物理地址
 			free_page (pte_page(pte));
 			shm_rss--;
 		} else {
@@ -232,6 +241,7 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 
 	if (cmd < 0 || shmid < 0)
 		return -EINVAL;
+	// 设置，先复制到内核地址
 	if (cmd == IPC_SET) {
 		if (!buf)
 			return -EFAULT;
@@ -400,13 +410,14 @@ static struct vm_operations_struct shm_vm_ops = {
 static inline void insert_attach (struct shmid_ds * shp, struct vm_area_struct * shmd)
 {
 	struct vm_area_struct * attaches;
-	// 插入双向循环链表
+	// 插入双向循环链表,shp->attaches指向最后一个节点
 	if ((attaches = shp->attaches)) {
 		shmd->vm_next_share = attaches;
 		shmd->vm_prev_share = attaches->vm_prev_share;
 		shmd->vm_prev_share->vm_next_share = shmd;
 		attaches->vm_prev_share = shmd;
 	} else
+		// 指向第一个节点，该节点的前后指针指向自己
 		shp->attaches = shmd->vm_next_share = shmd->vm_prev_share = shmd;
 }
 
@@ -495,13 +506,15 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	}
 	// 没有显式需要map的地址
 	if (!(addr = (ulong) shmaddr)) {
-		// 但是设置了remap标记则报错
+		// 但是设置了remap标记则报错，因为不知道哪块内存需要remap
 		if (shmflg & SHM_REMAP)
 			return -EINVAL;
 		// 否则从当前进程中查找一个还没有被vm_area_struct管理的空间
 		if (!(addr = get_unmapped_area(shp->shm_segsz)))
 			return -ENOMEM;
+	// 是否按SHMLBA对齐
 	} else if (addr & (SHMLBA-1)) {
+		// 没有对齐但是设置了SHM_RND则系统会进行强行对齐处理，否则报错
 		if (shmflg & SHM_RND)
 			addr &= ~(SHMLBA-1);       /* round down */
 		else
@@ -512,7 +525,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EINVAL;
 	}
 	if (!(shmflg & SHM_REMAP))
-		// 查找addr这个地址是不是已经在vm_area_struct平衡树中
+		// 查找addr这个地址是不是已经在vm_area_struct平衡树中,没有设置remap但是该内存已被映射，则报错
 		if ((shmd = find_vma_intersection(current, addr, addr + shp->shm_segsz))) {
 			/* printk("shmat() -> EINVAL because the interval [0x%lx,0x%lx) intersects an already mapped interval [0x%lx,0x%lx).\n",
 				addr, addr + shp->shm_segsz, shmd->vm_start, shmd->vm_end); */

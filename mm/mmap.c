@@ -46,7 +46,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 {
 	int error;
 	struct vm_area_struct * vma;
-	// 长度为0
+	// 长度小于1页
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;
 	// 开始地址或结束地址不在用户空间
@@ -68,13 +68,13 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		switch (flags & MAP_TYPE) {
 		// 共享，每个进程都可见，并且修改会同步到硬盘
 		case MAP_SHARED:
-			// 设置了写，但是文件不可写则报错，如果是共享只读是可以的
+			// 设置了可写，但是文件不可写则报错，如果是共享只读是可以的
 			if ((prot & PROT_WRITE) && !(file->f_mode & 2))
 				return -EACCES;
 			/* fall through */
 		// 私有映射，修改文件不会同步到硬盘
 		case MAP_PRIVATE:
-			// 不可读
+			// 不可读则报错，因为是私有的，不会修改文件内容，所以不需要检查文件是否可写
 			if (!(file->f_mode & 1))
 				return -EACCES;
 			break;
@@ -97,11 +97,15 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		// 不是页对齐
 		if (addr & ~PAGE_MASK)
 			return -EINVAL;
-		// 
+		//  开头检查过了
 		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -EINVAL;
 	} else {
-		// 获取一个没使用的地址，由vma管理
+		/* 
+			addr是NULL则由系统随机选一个开始地址，如果非NULL，操作系统会尽量满足开始地址是addr，
+			但该addr只是参考，不一定会满足。
+			下面获取一个没使用的地址，由vma管理
+		*/
 		addr = get_unmapped_area(len);
 		if (!addr)
 			return -ENOMEM;
