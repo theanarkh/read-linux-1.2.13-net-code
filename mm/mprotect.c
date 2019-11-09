@@ -195,6 +195,7 @@ static inline int mprotect_fixup_middle(struct vm_area_struct * vma,
 	if (vma->vm_inode)
 		vma->vm_inode->i_count += 2;
 	if (vma->vm_ops && vma->vm_ops->open) {
+		// 见shm.c
 		vma->vm_ops->open(left);
 		vma->vm_ops->open(right);
 	}

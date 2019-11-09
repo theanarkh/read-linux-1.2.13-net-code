@@ -466,6 +466,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	merge_segments(current, shmd->vm_start, shmd->vm_end);
 
 	/* map page range */
+	// 保存一些上下文，缺页中断的时候在shm_swap_in里使用
 	shm_sgn = shmd->vm_pte + ((shmd->vm_offset >> PAGE_SHIFT) << SHM_IDX_SHIFT);
 	for (tmp = shmd->vm_start; tmp < shmd->vm_end; tmp += PAGE_SIZE,
 	     shm_sgn += (1 << SHM_IDX_SHIFT)) {
@@ -546,7 +547,9 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	}
 
 	shmd->vm_pte = (SHM_SWP_TYPE << 1) | (id << SHM_ID_SHIFT);
+	// vma的开始地址
 	shmd->vm_start = addr;
+	// 结束地址是共享内存的大小
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->vm_task = current;
 	shmd->vm_page_prot = (shmflg & SHM_RDONLY) ? PAGE_READONLY : PAGE_SHARED;
