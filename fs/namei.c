@@ -216,6 +216,7 @@ int follow_link(struct inode * dir, struct inode * inode,
  * dir_namei() returns the inode of the directory of the
  * specified name, and the name within that directory.
  */
+// 找出pathname中最后一级目录对应的inode
 static int dir_namei(const char * pathname, int * namelen, const char ** name,
 	struct inode * base, struct inode ** res_inode)
 {
@@ -237,12 +238,13 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 		pathname++;
 		base->i_count++;
 	}
+	// 找出pathname最后一级目录对应的inode节点
 	while (1) {
 		thisname = pathname;
 		// 以/分割路径部分，遇到/则得到某级路径名称，thisname指向当前路径首地址，len代表该部分路径对应的长度
 		for(len=0;(c = *(pathname++))&&(c != '/');len++)
 			/* nothing */ ;
-		// c为空说明到最后一个字符，即路径结束
+		// c为空说明到最后一个字符，即路径结束，不找最后一级的文件或者目录了
 		if (!c)
 			break;
 		base->i_count++;
@@ -252,6 +254,7 @@ static int dir_namei(const char * pathname, int * namelen, const char ** name,
 			iput(base);
 			return error;
 		}
+		// 设置base为inode，继续找
 		error = follow_link(base,inode,0,0,&base);
 		if (error)
 			return error;
@@ -339,6 +342,7 @@ int namei(const char * pathname, struct inode ** res_inode)
  * which is a lot more logical, and also allows the "no perm" needed
  * for symlinks (where the permissions are checked later).
  */
+// 找出pathname对应的inode
 int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base)
 {
@@ -348,6 +352,7 @@ int open_namei(const char * pathname, int flag, int mode,
 
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
+	// 找出最后一级目录的inode
 	error = dir_namei(pathname,&namelen,&basename,base,&dir);
 	if (error)
 		return error;
@@ -388,6 +393,7 @@ int open_namei(const char * pathname, int flag, int mode,
 		}
 		up(&dir->i_sem);
 	} else
+		// 在目录下找出某文件对应的inode
 		error = lookup(dir,basename,namelen,&inode);
 	if (error) {
 		iput(dir);

@@ -446,6 +446,7 @@ int do_open(const char * filename,int flags,int mode)
 		flag++;
 	if (flag & (O_TRUNC | O_CREAT))
 		flag |= 2;
+	// 找到文件对应的inode节点，放到inode变量中
 	error = open_namei(filename,flag,mode,&inode,NULL);
 	if (!error && (f->f_mode & 2)) {
 		error = get_write_access(inode);

@@ -94,6 +94,7 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 	if (namelen > EXT_NAME_LEN)
 		namelen = EXT_NAME_LEN;
 #endif
+	// 读取目录的文件内容，然后比较
 	bh = ext_bread(dir,0,0);
 	if (!bh)
 		return NULL;
@@ -126,6 +127,7 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 /*			brelse (bh);
 			return NULL; */
 		}
+		// 是否找到了想要的文件
 		if (ext_match(namelen,name,de)) {
 			*res_dir = de;
 			if (next_dir)

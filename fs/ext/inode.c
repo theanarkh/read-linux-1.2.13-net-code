@@ -63,13 +63,14 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 
 	lock_super(s);
 	set_blocksize(dev, BLOCK_SIZE);
-	// 读取设置的第一块内容
+	// 读取设备的内容，即超级块的内容
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
 		s->s_dev=0;
 		unlock_super(s);
 		printk("EXT-fs: unable to read superblock\n");
 		return NULL;
 	}
+	// 文件系统的一些属性
 	es = (struct ext_super_block *) bh->b_data;
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
@@ -117,7 +118,9 @@ struct super_block *ext_read_super(struct super_block *s,void *data,
 	unlock_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
+	// 操作函数集
 	s->s_op = &ext_sops;
+	// 读取根节点
 	if (!(s->s_mounted = iget(s,EXT_ROOT_INO))) {
 		s->s_dev=0;
 		printk("EXT-fs: get root inode failed\n");
@@ -354,12 +357,15 @@ void ext_read_inode(struct inode * inode)
 	struct buffer_head * bh;
 	struct ext_inode * raw_inode;
 	int block;
-
+	// 每个硬盘块可以存储的inode结构体数，+2是代表启动扇区、超级块数据的硬盘块
 	block = 2 + (inode->i_ino-1)/EXT_INODES_PER_BLOCK;
+	// 读取某设备的某个块
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE)))
 		panic("unable to read i-node block");
+	// 取余算出偏移从而得到inode结构体的数据
 	raw_inode = ((struct ext_inode *) bh->b_data) +
 		(inode->i_ino-1)%EXT_INODES_PER_BLOCK;
+	// 复制某些字段到内存的inode结构体
 	inode->i_mode = raw_inode->i_mode;
 	inode->i_uid = raw_inode->i_uid;
 	inode->i_gid = raw_inode->i_gid;
@@ -367,12 +373,15 @@ void ext_read_inode(struct inode * inode)
 	inode->i_size = raw_inode->i_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = raw_inode->i_time;
 	inode->i_blocks = inode->i_blksize = 0;
+	// 字符和块设备的i_zone[0]是设备号
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = raw_inode->i_zone[0];
 	else for (block = 0; block < 12; block++)
+		// 否则i_zone里存的是文件数据的硬盘直接块号或者间接块号 
 		inode->u.ext_i.i_data[block] = raw_inode->i_zone[block];
 	brelse(bh);
 	inode->i_op = NULL;
+	// 不同类型的文件赋值不同的操作函数集
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &ext_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))

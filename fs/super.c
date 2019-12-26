@@ -276,7 +276,7 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,
 	if (!dev)
 		return NULL;
 	check_disk_change(dev);
-	// 有则直接返回
+	// 有则直接返回，初始化的时候还没有
 	s = get_super(dev);
 	if (s)
 		return s;
@@ -296,7 +296,7 @@ static struct super_block * read_super(dev_t dev,char *name,int flags,
 	// 赋值给超级块节点的字段
 	s->s_dev = dev;
 	s->s_flags = flags;
-	// 调底层的文件系统到硬盘去读取超级块内容
+	// 调底层的文件系统到硬盘去读取超级块内容，比如ext文件系统，ext2文件系统等等都定义了该函数。
 	if (!type->read_super(s,data, silent)) {
 		s->s_dev = 0;
 		return NULL;
@@ -672,12 +672,15 @@ void mount_root(void)
 
 	memset(&filp, 0, sizeof(filp));
 	memset(&d_inode, 0, sizeof(d_inode));
+	// 根设备号
 	d_inode.i_rdev = ROOT_DEV;
 	filp.f_inode = &d_inode;
+	// 只读方式挂载
 	if ( root_mountflags & MS_RDONLY)
 		filp.f_mode = 1; /* read only */
 	else
 		filp.f_mode = 3; /* read write */
+	// 暂时忽略
 	retval = blkdev_open(&d_inode, &filp);
 	if(retval == -EROFS){
 		root_mountflags |= MS_RDONLY;
@@ -688,19 +691,25 @@ void mount_root(void)
 	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
 		if(retval)
 			break;
+		// 没有关联到设备则不需要往下执行，有些文件系统是没有对应的底层设备的
 		if (!fs_type->requires_dev)
 			continue;
+		// 读根设备的超级块，设备的第一扇区是分区表，接着是超级块
 		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);
+		// 读取成功
 		if (sb) {
+			// 根节点 
 			inode = sb->s_mounted;
 			inode->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
 			sb->s_covered = inode;
 			sb->s_flags = root_mountflags;
+			// 当前进程（init进程）的根目录和工作目录设置为根节点
 			current->fs->pwd = inode;
 			current->fs->root = inode;
 			printk ("VFS: Mounted root (%s filesystem)%s.\n",
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
+			// 直接返回，即第一个读取成功的文件系统成为根文件系统
 			return;
 		}
 	}

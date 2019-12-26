@@ -9,9 +9,9 @@
 #define EXT_ROOT_INO 1
 
 #define EXT_SUPER_MAGIC 0x137D
-
+// 每个逻辑块可以保持多少个inode节点
 #define EXT_INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct ext_inode)))
-
+// 硬盘中的inode结构体
 struct ext_inode {
 	unsigned short i_mode;
 	unsigned short i_uid;
@@ -33,7 +33,7 @@ struct ext_free_block {
 	unsigned long free[254];
 	unsigned long next;
 };
-
+// 文件系统超级块
 struct ext_super_block {
 	unsigned long s_ninodes;
 	unsigned long s_nzones;
