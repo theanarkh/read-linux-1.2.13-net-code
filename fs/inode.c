@@ -590,6 +590,7 @@ found_it:
 		iput(inode);
 		goto repeat;
 	}
+	// 跨文件系统的实现
 	if (crossmntp && inode->i_mount) {
 		struct inode * tmp = inode->i_mount;
 		tmp->i_count++;

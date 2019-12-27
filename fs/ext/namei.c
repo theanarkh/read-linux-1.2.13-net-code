@@ -168,6 +168,7 @@ int ext_lookup(struct inode * dir,const char * name, int len,
 	}
 	ino = de->inode;
 	brelse(bh);
+	// 跨文件系统实现的关键代码
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -EACCES;

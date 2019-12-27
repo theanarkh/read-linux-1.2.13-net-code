@@ -266,7 +266,7 @@ void put_super(dev_t dev)
 		sb->s_op->put_super(sb);
 }
 
-// 读设置对应的超级块
+// 读设备对应的超级块
 static struct super_block * read_super(dev_t dev,char *name,int flags,
 				       void *data, int silent)
 {
@@ -451,14 +451,16 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 	struct inode * dir_i;
 	struct super_block * sb;
 	int error;
-
+	// 找到挂载点的inode，存在dir_i中
 	error = namei(dir,&dir_i);
 	if (error)
 		return error;
+	// 已经挂载了其他文件系统（需要调re_mount）或者该inode正在被使用
 	if (dir_i->i_count != 1 || dir_i->i_mount) {
 		iput(dir_i);
 		return -EBUSY;
 	}
+	// 不是目录不能挂载
 	if (!S_ISDIR(dir_i->i_mode)) {
 		iput(dir_i);
 		return -ENOTDIR;
@@ -467,6 +469,7 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 		iput(dir_i);
 		return -EBUSY;
 	}
+	// 读取超级块和根节点
 	sb = read_super(dev,type,flags,data,0);
 	if (!sb) {
 		iput(dir_i);
@@ -476,6 +479,7 @@ static int do_mount(dev_t dev, const char * dir, char * type, int flags, void * 
 		iput(dir_i);
 		return -EBUSY;
 	}
+	// 挂载点和新文件系统互相关联
 	sb->s_covered = dir_i;
 	dir_i->i_mount = sb->s_mounted;
 	return 0;		/* we don't iput(dir_i) - see umount */
