@@ -75,7 +75,7 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 {
 	register unsigned long i, j;
 	int k;
-
+	// it_value后触发信号，每隔it_interval后继续触发
 	i = tvtojiffies(&value->it_interval);
 	j = tvtojiffies(&value->it_value);
 	if (ovalue && (k = _getitimer(which, ovalue)) < 0)

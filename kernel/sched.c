@@ -651,6 +651,7 @@ static void do_timer(int irq, struct pt_regs * regs)
 	}
 	/* Update ITIMER_PROF for the current task */
 	if (current->it_prof_value && !(--current->it_prof_value)) {
+		// 到期，触发，并且重新设置一个值x，每隔x后再次触发
 		current->it_prof_value = current->it_prof_incr;
 		send_sig(SIGPROF,current,1);
 	}
