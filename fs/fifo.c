@@ -107,7 +107,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 		// 此时没有读者，则唤醒等到读者的进程（如果有的话），因为这里以读写方式打开管道，当前进程就是一个读者
 		if (!PIPE_READERS(*inode)++)
 			wake_up_interruptible(&PIPE_WAIT(*inode));
-		// 有等待写的进程，
+		// 有等待打开写的进程，
 		while (PIPE_WR_OPENERS(*inode))
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		// 此时没有写者，同上

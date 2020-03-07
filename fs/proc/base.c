@@ -72,6 +72,7 @@ int proc_match(int len,const char * name,struct proc_dir_entry * de)
 	if (!de || !de->low_ino)
 		return 0;
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
+	// 传了空字符，目录de是.，即当前文件
 	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
 		return 1;
 	if (de->namelen != len)

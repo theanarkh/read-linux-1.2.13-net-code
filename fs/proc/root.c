@@ -83,7 +83,7 @@ static struct proc_dir_entry root_dir[] = {
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))
-
+// 在目录dir下查找名字为name的文件
 static int proc_lookuproot(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
@@ -97,11 +97,16 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
+	// 根目录下的所有文件个数
 	i = NR_ROOT_DIRENTRY;
+	// 根据名字，找到对应的目录项
 	while (i-- > 0 && !proc_match(len,name,root_dir+i))
 		/* nothing */;
+	// 找到了
 	if (i >= 0) {
+		// 获取inode号
 		ino = root_dir[i].low_ino;
+		// 根节点，直接返回，即路径是/
 		if (ino == PROC_ROOT_INO) {
 			*result = dir;
 			return 0;
@@ -109,16 +114,21 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		if (ino == PROC_SELF) /* self modifying inode ... */
 			ino = (current->pid << 16) + 2;
 	} else {
+		// 没找到，说明是文件名为进程号的动态文件
 		pid = 0;
 		while (len-- > 0) {
+			// 进程号的个位
 			c = *name - '0';
 			name++;
+			// 大于9说明不是数字
 			if (c > 9) {
 				pid = 0;
 				break;
 			}
+			// 计算进程号
 			pid *= 10;
 			pid += c;
+			// 大于0xffff则不是进程号
 			if (pid & 0xffff0000) {
 				pid = 0;
 				break;
@@ -133,6 +143,7 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 		}
 		ino = (pid << 16) + 2;
 	}
+	// 根据inode号获取inode节点
 	if (!(*result = iget(dir->i_sb,ino))) {
 		iput(dir);
 		return -ENOENT;

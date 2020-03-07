@@ -74,7 +74,7 @@ static int parse_options(char *options,uid_t *uid,gid_t *gid)
 	return 1;
 }
 
-
+// 读取proc文件系统的超级块
 struct super_block *proc_read_super(struct super_block *s,void *data, 
 				    int silent)
 {
@@ -82,8 +82,10 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 	s->s_blocksize = 1024;
 	s->s_blocksize_bits = 10;
 	s->s_magic = PROC_SUPER_MAGIC;
+	// 操作函数集
 	s->s_op = &proc_sops;
 	unlock_super(s);
+	// 读取proc文件系统的根节点
 	if (!(s->s_mounted = iget(s,PROC_ROOT_INO))) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
@@ -105,7 +107,7 @@ void proc_statfs(struct super_block *sb, struct statfs *buf)
 	put_fs_long(NAME_MAX, &buf->f_namelen);
 	/* Don't know what value to put in buf->f_fsid */
 }
-
+// 读取proc文件系统的inode，inode的inode号在vfs的read_inode中完成了
 void proc_read_inode(struct inode * inode)
 {
 	unsigned long ino, pid;
@@ -122,6 +124,7 @@ void proc_read_inode(struct inode * inode)
 	inode->i_blocks = 0;
 	inode->i_blksize = 1024;
 	ino = inode->i_ino;
+	// 高位保存进程id
 	pid = ino >> 16;
 	p = task[0];
 	for (i = 0; i < NR_TASKS ; i++)
@@ -129,12 +132,14 @@ void proc_read_inode(struct inode * inode)
 			break;
 	if (!p || i >= NR_TASKS)
 		return;
+	// 根节点直接返回
 	if (ino == PROC_ROOT_INO) {
 		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 		inode->i_nlink = 2;
 		for (i = 1 ; i < NR_TASKS ; i++)
 			if (task[i])
 				inode->i_nlink++;
+		// 读取根节点下面的文件的操作函数集
 		inode->i_op = &proc_root_inode_operations;
 		return;
 	}

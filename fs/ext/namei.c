@@ -162,6 +162,7 @@ int ext_lookup(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
+	// 找到文件或目录对应的inode
 	if (!(bh = ext_find_entry(dir,name,len,&de,NULL,NULL))) {
 		iput(dir);
 		return -ENOENT;
