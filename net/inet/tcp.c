@@ -5034,7 +5034,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Note most of these are inline now. I'll inline the lot when
 	 *	I have time to test it hard and look at what gcc outputs 
 	 */
-	// 数据通信的ack包
+	
 	if(!tcp_sequence(sk,th,len,opt,saddr,dev))
 	{
 		kfree_skb(skb, FREE_READ);
@@ -5059,7 +5059,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Process the ACK
 	 */
 	 
-	// 正常数据通信的ack包
+	// ack包
 	if(th->ack && !tcp_ack(sk,th,saddr,len))
 	{
 		/*
