@@ -1,6 +1,8 @@
 # read-linux-1.2.13-net-code
 linux网络源码分析
 
+文章：https://zhuanlan.zhihu.com/c_1094189343643652096
+
 ### [网络编程函数socket源码分析](https://blog.csdn.net/THEANARKH/article/details/85552592)
 ### [网络函数bind源码分析](https://blog.csdn.net/THEANARKH/article/details/85555521)
 ### [网络函数listen源码分析](https://blog.csdn.net/THEANARKH/article/details/85556600)
