@@ -2141,7 +2141,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 	// 应用层可以读但还没读的数据的第一个序列号 
 	peek_seq = sk->copied_seq;
 	seq = &sk->copied_seq;
-	// 读取但是不从缓冲区中移除
+	// 读取但是不从缓冲区中移除，前瞻
 	if (flags & MSG_PEEK)
 		seq = &peek_seq;
 
@@ -4944,7 +4944,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				sk->dummy_th.dest=th->source;
 				// 可以读取但是还没读取的序列号
 				sk->copied_seq = sk->acked_seq;
-				// 唤醒阻塞在accept函数的进程
+				// 唤醒阻塞在connect函数的进程
 				if(!sk->dead)
 				{
 					sk->state_change(sk);
@@ -5034,7 +5034,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Note most of these are inline now. I'll inline the lot when
 	 *	I have time to test it hard and look at what gcc outputs 
 	 */
-	
+	// 校验包
 	if(!tcp_sequence(sk,th,len,opt,saddr,dev))
 	{
 		kfree_skb(skb, FREE_READ);
