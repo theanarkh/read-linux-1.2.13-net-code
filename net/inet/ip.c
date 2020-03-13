@@ -1292,7 +1292,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		/*
 		 *	Copy a block of the IP datagram.
 		 */
-		// 复制数据部分，长度为len，ptr指向原ip报文的首地址，
+		// 复制数据部分，长度为len，ptr指向原ip报文中数据部分的首地址 
 		memcpy(skb2->h.raw + hlen, ptr, len);
 		left -= len;
 		// 指向ip头首地址
@@ -1309,11 +1309,10 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		 *		   last fragment then keep MF on each bit
 		 */
 		/*
-			1. 还有数据
-			2. 再分片的时候，该分片本身设置了分片flag，如果left大于MF置1，
-			如果left=0，需要看原报文是否设置了MF,如果有，说明原报文后面还有报文，
-			所以原报文下的所有分片MF都是1，如果原报文是最后一个报文，则MF=0，那对原报文分片的时候，
-			最后一个分片的MF=0，其他的为1
+			1. 还有数据，则置MF，还要更多分片
+			2. is_frag =1；说明该分片后面还有更多分片。
+			表示被分片的数据本身就是一个ip分片，即再分片。
+			所以该报文下的所有分片MF都是1。
 		*/
 		if (left > 0 || (is_frag & 1))
 			iph->frag_off |= htons(IP_MF);
@@ -1623,7 +1622,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	// 非0则说明是分片	
 	if(iph->frag_off)
 	{	
-		// 是否禁止分片，是的话is_frag等于1
+		// 是否设置了MF，即还有更多分片，是的话is_frag等于1
 		if (iph->frag_off & 0x0020)
 			is_frag|=1;
 		/*
@@ -1711,7 +1710,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	/*
 	 * Reassemble IP fragments.
  	 */
-	// 分片重组 
+	// 还有更多分片（等于1），不是第一个分片（等于2）或者两者（等于3）则分片重组 
 	if(is_frag)
 	{
 		/* Defragment. Obtain the complete packet if there is one */
