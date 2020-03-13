@@ -1204,7 +1204,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	 *	frame + options doesn't fit the mtu. As it used to fall down dead
 	 *	in this case we were fortunate it didn't happen
 	 */
-	// mac头的mtu小于8则直接返回，因为报文数据部分至少8个字节
+	// mac头的mtu小于8则直接返回
 	if(mtu<8)
 	{
 		/* It's wrong but it's better than nothing */
