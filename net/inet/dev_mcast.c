@@ -65,7 +65,7 @@ void dev_mc_upload(struct device *dev)
 	/* Don't do anything till we up the interface
 	   [dev_open will call this function so the list will
 	    stay sane] */
-	    
+	// 不工作了
 	if(!(dev->flags&IFF_UP))
 		return;
 		
@@ -74,12 +74,13 @@ void dev_mc_upload(struct device *dev)
 	if(dev->set_multicast_list==NULL)
 		return;
 	/* Promiscuous is promiscuous - so no filter needed */
+	// 当前是混杂模式，则不需要设置多播了，因为网卡会处理所有收到的数据，不管是不是发给自己的
 	if(dev->flags&IFF_PROMISC)
 	{
 		dev->set_multicast_list(dev, -1, NULL);
 		return;
 	}
-	
+	// 多播地址个数
 	if(dev->mc_count==0)
 	{
 		dev->set_multicast_list(dev,0,NULL);
@@ -92,11 +93,13 @@ void dev_mc_upload(struct device *dev)
 		printk("Unable to get memory to set multicast list on %s\n",dev->name);
 		return;
 	}
+	// 复制所有的多播mac地址信息
 	for(tmp = data, dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
 	{
 		memcpy(tmp,dmi->dmi_addr, dmi->dmi_addrlen);
 		tmp+=dev->addr_len;
 	}
+	// 告诉网卡
 	dev->set_multicast_list(dev,dev->mc_count,data);
 	kfree(data);
 }
@@ -104,7 +107,7 @@ void dev_mc_upload(struct device *dev)
 /*
  *	Delete a device level multicast
  */
- 
+// 删除多播组信息 
 void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 {
 	struct dev_mc_list **dmi;

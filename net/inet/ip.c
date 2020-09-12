@@ -246,7 +246,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 	/*
 	 *	See if we need to look up the device.
 	 */
-
+// 设置了走某个dev作为出口
 #ifdef CONFIG_INET_MULTICAST	
 	if(MULTICAST(daddr) && *dev==NULL && skb->sk && *skb->sk->ip_mc_name)
 		*dev=dev_get(skb->sk->ip_mc_name);

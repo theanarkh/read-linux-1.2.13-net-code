@@ -151,7 +151,7 @@ static void ip_mc_map(unsigned long addr, char *buf)
 /*
  *	Add a filter to a device
  */
- 
+// 把多播组ip转成多播mac地址，32个ip对应一个mac地址
 void ip_mc_filter_add(struct device *dev, unsigned long addr)
 {
 	char buf[6];
@@ -184,8 +184,11 @@ static void igmp_group_dropped(struct ip_mc_list *im)
 
 static void igmp_group_added(struct ip_mc_list *im)
 {
+	// 初始化定时器，定时发送igmp数据包同步信息，说明自己还在组里
 	igmp_init_timer(im);
+	// 发送一个igmp数据包
 	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
+	// 转换多播组ip到多播mac地址，并记录到设备中
 	ip_mc_filter_add(im->interface, im->multiaddr);
 /*	printk("Joined group %lX\n",im->multiaddr);*/
 }
@@ -223,6 +226,7 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 static void ip_mc_inc_group(struct device *dev, unsigned long addr)
 {
 	struct ip_mc_list *i;
+	// 遍历该设置维护的多播组队列，判断是否已经有socket加入过该多播组，是则引用数加一
 	for(i=dev->ip_mc_list;i!=NULL;i=i->next)
 	{
 		if(i->multiaddr==addr)
@@ -231,6 +235,7 @@ static void ip_mc_inc_group(struct device *dev, unsigned long addr)
 			return;
 		}
 	}
+	// 到这说明，还没有socket加入过当前多播组，则记录并加入
 	i=(struct ip_mc_list *)kmalloc(sizeof(*i), GFP_KERNEL);
 	if(!i)
 		return;
@@ -238,6 +243,7 @@ static void ip_mc_inc_group(struct device *dev, unsigned long addr)
 	i->interface=dev;
 	i->multiaddr=addr;
 	i->next=dev->ip_mc_list;
+	// 通过igmp通知其他方
 	igmp_group_added(i);
 	dev->ip_mc_list=i;
 }
@@ -316,12 +322,14 @@ int ip_mc_join_group(struct sock *sk , struct device *dev, unsigned long addr)
 		return -EINVAL;
 	if(!(dev->flags&IFF_MULTICAST))
 		return -EADDRNOTAVAIL;
+	// 还没有加入过多播组
 	if(sk->ip_mc_list==NULL)
 	{
 		if((sk->ip_mc_list=(struct ip_mc_socklist *)kmalloc(sizeof(*sk->ip_mc_list), GFP_KERNEL))==NULL)
 			return -ENOMEM;
 		memset(sk->ip_mc_list,'\0',sizeof(*sk->ip_mc_list));
 	}
+	// 遍历加入的多播组队列，判断是否已经加入过
 	for(i=0;i<IP_MAX_MEMBERSHIPS;i++)
 	{
 		if(sk->ip_mc_list->multiaddr[i]==addr && sk->ip_mc_list->multidev[i]==dev)
@@ -329,11 +337,12 @@ int ip_mc_join_group(struct sock *sk , struct device *dev, unsigned long addr)
 		if(sk->ip_mc_list->multidev[i]==NULL)
 			unused=i;
 	}
-	
+	// 到这说明没有加入过当前设置的多播组，则记录并且加入
 	if(unused==-1)
 		return -ENOBUFS;
 	sk->ip_mc_list->multiaddr[unused]=addr;
 	sk->ip_mc_list->multidev[unused]=dev;
+	// addr为多播组ip
 	ip_mc_inc_group(dev,addr);
 	return 0;
 }
