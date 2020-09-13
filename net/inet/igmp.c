@@ -208,7 +208,7 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-	// 该数据包是发给所有多播主机的，用于查询本主机所加入的多播组，本主机会定时汇报
+	// 该数据包是发给所有多播主机的，用于查询多播组里是否还有成员
 	if(igh->type==IGMP_HOST_MEMBERSHIP_QUERY && daddr==IGMP_ALL_HOSTS)
 		igmp_heard_query(dev);
 	if(igh->type==IGMP_HOST_MEMBERSHIP_REPORT && daddr==igh->group)
