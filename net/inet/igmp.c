@@ -41,7 +41,7 @@
  *	Timer management
  */
  
- 
+// 关闭定时器 
 static void igmp_stop_timer(struct ip_mc_list *im)
 {
 	del_timer(&im->timer);
@@ -55,7 +55,7 @@ static int random(void)
 	return seed^jiffies;
 }
 
-
+// 开启一个定时器
 static void igmp_start_timer(struct ip_mc_list *im)
 {
 	int tv;
@@ -72,7 +72,7 @@ static void igmp_start_timer(struct ip_mc_list *im)
  */
 
 #define MAX_IGMP_SIZE (sizeof(struct igmphdr)+sizeof(struct iphdr)+64)
-
+// 发送一个igmp数据包
 static void igmp_send_report(struct device *dev, unsigned long address, int type)
 {
 	struct sk_buff *skb=alloc_skb(MAX_IGMP_SIZE, GFP_ATOMIC);
@@ -81,6 +81,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 	
 	if(skb==NULL)
 		return;
+	// 构建ip头,address为目的ip，是一个多播地址
 	tmp=ip_build_header(skb, INADDR_ANY, address, &dev, IPPROTO_IGMP, NULL,
 				skb->mem_len, 0, 1);
 	if(tmp<0)
@@ -95,10 +96,11 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 	igh->type=type;
 	igh->group=address;
 	igh->csum=ip_compute_csum((void *)igh,sizeof(*igh));
+	// 调用ip层接口发送
 	ip_queue_xmit(NULL,dev,skb,1);
 }
 
-
+// 
 static void igmp_timer_expire(unsigned long data)
 {
 	struct ip_mc_list *im=(struct ip_mc_list *)data;
@@ -114,7 +116,7 @@ static void igmp_init_timer(struct ip_mc_list *im)
 	im->timer.function=&igmp_timer_expire;
 }
 	
-
+// 收到其他组成员，对于多播路由查询报文的回复，则自己就不用回复了，因为多播路由知道该组还有成员，不会删除路由信息，减少网络流量
 static void igmp_heard_report(struct device *dev, unsigned long address)
 {
 	struct ip_mc_list *im;
@@ -122,11 +124,12 @@ static void igmp_heard_report(struct device *dev, unsigned long address)
 		if(im->multiaddr==address)
 			igmp_stop_timer(im);
 }
-
+// 处理组播路由的查询报文，开启定时器，超时后回复
 static void igmp_heard_query(struct device *dev)
 {
 	struct ip_mc_list *im;
 	for(im=dev->ip_mc_list;im!=NULL;im=im->next)
+		// IGMP_ALL_HOSTS表示所有组播主机
 		if(!im->tm_running && im->multiaddr!=IGMP_ALL_HOSTS)
 			igmp_start_timer(im);
 }
@@ -134,7 +137,7 @@ static void igmp_heard_query(struct device *dev)
 /*
  *	Map a multicast IP onto multicast MAC for type ethernet.
  */
- 
+// 多播ip转成多播mac地址
 static void ip_mc_map(unsigned long addr, char *buf)
 {
 	addr=ntohl(addr);
@@ -151,7 +154,7 @@ static void ip_mc_map(unsigned long addr, char *buf)
 /*
  *	Add a filter to a device
  */
-// 把多播组ip转成多播mac地址，32个ip对应一个mac地址
+// 把多播组ip转成多播mac地址，32个ip对应一个mac地址，然后记录到底层的device
 void ip_mc_filter_add(struct device *dev, unsigned long addr)
 {
 	char buf[6];
@@ -173,7 +176,7 @@ void ip_mc_filter_del(struct device *dev, unsigned long addr)
 	ip_mc_map(addr,buf);	
 	dev_mc_delete(dev,buf,ETH_ALEN,0);
 }
-
+// 退出多播组
 static void igmp_group_dropped(struct ip_mc_list *im)
 {
 	del_timer(&im->timer);
@@ -181,10 +184,10 @@ static void igmp_group_dropped(struct ip_mc_list *im)
 	ip_mc_filter_del(im->interface, im->multiaddr);
 /*	printk("Left group %lX\n",im->multiaddr);*/
 }
-
+// 加入多播组
 static void igmp_group_added(struct ip_mc_list *im)
 {
-	// 初始化定时器，定时发送igmp数据包同步信息，说明自己还在组里
+	// 初始化定时器
 	igmp_init_timer(im);
 	// 发送一个igmp数据包
 	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_MEMBERSHIP_REPORT);
@@ -192,20 +195,20 @@ static void igmp_group_added(struct ip_mc_list *im)
 	ip_mc_filter_add(im->interface, im->multiaddr);
 /*	printk("Joined group %lX\n",im->multiaddr);*/
 }
-
+// 收到一个igmp数据包
 int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	unsigned long daddr, unsigned short len, unsigned long saddr, int redo,
 	struct inet_protocol *protocol)
 {
 	/* This basically follows the spec line by line -- see RFC1112 */
 	struct igmphdr *igh=(struct igmphdr *)skb->h.raw;
-	
+	// 
 	if(skb->ip_hdr->ttl!=1 || ip_compute_csum((void *)igh,sizeof(*igh)))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-	
+	// 该数据包是发给所有多播主机的，用于查询本主机所加入的多播组，本主机会定时汇报
 	if(igh->type==IGMP_HOST_MEMBERSHIP_QUERY && daddr==IGMP_ALL_HOSTS)
 		igmp_heard_query(dev);
 	if(igh->type==IGMP_HOST_MEMBERSHIP_REPORT && daddr==igh->group)
@@ -275,7 +278,7 @@ static void ip_mc_dec_group(struct device *dev, unsigned long addr)
 /*
  *	Device going down: Clean up.
  */
- 
+// 设备停止工作了，删除对应的多播信息 
 void ip_mc_drop_device(struct device *dev)
 {
 	struct ip_mc_list *i;
@@ -291,7 +294,7 @@ void ip_mc_drop_device(struct device *dev)
 /*
  *	Device going up. Make sure it is in all hosts
  */
- 
+// 设备启动的时候，让设备加入allhost多播组，使得可以处理目的ip是224.0.0.1的多播消息 
 void ip_mc_allhost(struct device *dev)
 {
 	struct ip_mc_list *i;
@@ -313,7 +316,7 @@ void ip_mc_allhost(struct device *dev)
 /*
  *	Join a socket to a group
  */
- 
+// 加入多播组
 int ip_mc_join_group(struct sock *sk , struct device *dev, unsigned long addr)
 {
 	int unused= -1;
@@ -350,7 +353,7 @@ int ip_mc_join_group(struct sock *sk , struct device *dev, unsigned long addr)
 /*
  *	Ask a socket to leave a group.
  */
- 
+// 离开多播组
 int ip_mc_leave_group(struct sock *sk, struct device *dev, unsigned long addr)
 {
 	int i;
@@ -376,7 +379,7 @@ int ip_mc_leave_group(struct sock *sk, struct device *dev, unsigned long addr)
 /*
  *	A socket is closing.
  */
- 
+// socket关闭， 退出他之前加入过的多播组
 void ip_mc_drop_socket(struct sock *sk)
 {
 	int i;
