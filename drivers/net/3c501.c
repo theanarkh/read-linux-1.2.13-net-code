@@ -649,14 +649,14 @@ static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
     int ioaddr = dev->base_addr;
-
+	// 多播模式
     if (num_addrs > 0) {
 	outb(RX_MULT, RX_CMD);
 	inb(RX_STATUS);		/* Clear status. */
-    } else if (num_addrs < 0) {
+    } else if (num_addrs < 0) { // 混杂模式
 	outb(RX_PROM, RX_CMD);
 	inb(RX_STATUS);
-    } else {
+    } else { // 正常模式
 	outb(RX_NORM, RX_CMD);
 	inb(RX_STATUS);
     }

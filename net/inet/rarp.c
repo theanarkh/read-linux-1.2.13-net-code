@@ -145,7 +145,9 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	We shouldn't use this type conversion. Check later.
  */
+	// rarp协议报文
 	struct arphdr *rarp = (struct arphdr *)skb->h.raw;
+	// rarp协议数据部分
 	unsigned char *rarp_ptr = (unsigned char *)(rarp+1);
 	struct rarp_table *entry;
 	long sip,tip;
@@ -154,7 +156,7 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	If this test doesn't pass, it's not IP, or we should ignore it anyway
  */
-
+	// 硬件地址长度或类型不一致则忽略
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd) 
 		|| dev->flags&IFF_NOARP)
 	{
@@ -165,6 +167,7 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	If it's not a RARP request, delete it.
  */
+	// 不是请求报文则忽略
 	if (rarp->ar_op != htons(ARPOP_RREQUEST))
 	{
 		kfree_skb(skb, FREE_READ);
@@ -192,13 +195,19 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	Extract variable width fields
  */
-
+	// rarp协议首地址
 	sha=rarp_ptr;
+	// 发送端mac地址长度
 	rarp_ptr+=dev->addr_len;
+	// 拿到发送端ip，存到sip
 	memcpy(&sip,rarp_ptr,4);
+	// 跳过4字节
 	rarp_ptr+=4;
+	// 目的mac地址
 	tha=rarp_ptr;
+	// 跳过mac地址长度
 	rarp_ptr+=dev->addr_len;
+	// 目的ip地址
 	memcpy(&tip,rarp_ptr,4);
 
 /*
@@ -207,14 +216,15 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   
 	cli();
 	for (entry = rarp_tables; entry != NULL; entry = entry->next)
+		// 判断mac地址是否相等
 		if (!memcmp(entry->ha, tha, rarp->ar_hln))
 			break;
-  
+	// 非空则说明找到
 	if (entry != NULL)
-	{
+	{	// 拿到对应的ip
 		sip=entry->ip;
 		sti();
-
+		// 回复，类似是响应ARPOP_RREPLY
 		arp_send(ARPOP_RREPLY, ETH_P_RARP, sip, dev, dev->pa_addr, sha, 
 			dev->dev_addr);
 	}
