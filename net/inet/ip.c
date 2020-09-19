@@ -2031,15 +2031,18 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	/*
 	 *	Multicasts are looped back for other local users
 	 */
-	 
+	// 目的地是多播地址，并且不是回环设备 
 	if (MULTICAST(iph->daddr) && !(dev->flags&IFF_LOOPBACK))
 	{
+		// 是否需要给自己一份
 		if(sk==NULL || sk->ip_mc_loop)
-		{
+		{	
+			// 给所有多播组的所有主机的数据包，则直接给自己一份
 			if(iph->daddr==IGMP_ALL_HOSTS)
 				ip_loopback(dev,skb);
 			else
-			{
+			{	
+				// 判断目的ip是否在当前设备的多播ip列表中，是的回传一份
 				struct ip_mc_list *imc=dev->ip_mc_list;
 				while(imc!=NULL)
 				{
